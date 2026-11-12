@@ -342,3 +342,42 @@ test('admin can manage inventory categories in database and inventory uses them 
     expect(InventoryCategory::where('code', 'STV')->exists())->toBeTrue();
     expect(InventoryItem::getCategories())->toContain('Perangkat Smart TV & Display');
 });
+
+test('inventory index displays compact table with jenis below name, maintenance cycle, and reminder badges', function () {
+    $staff = User::factory()->create(['type' => 'Staf']);
+
+    // 1. Physical asset with coming soon maintenance
+    $physical = InventoryItem::factory()->create([
+        'name' => 'Workstation Lab AI #01',
+        'asset_type' => 'physical',
+        'maintenance_cycle' => 'quarterly',
+        'next_maintenance_date' => now()->addDays(5),
+    ]);
+
+    // 2. Digital license with coming soon renewal
+    $digital = InventoryItem::factory()->create([
+        'name' => 'Lisensi Cloud LMS PuTI',
+        'asset_type' => 'digital',
+        'billing_cycle' => 'yearly',
+        'renewal_date' => now()->addDays(10),
+    ]);
+
+    $res = $this->actingAs($staff)->get('/inventory');
+    $res->assertOk();
+
+    // Headers check
+    $res->assertSee('Kode');
+    $res->assertSee('Nama & Info Aset', false);
+    $res->assertSee('Status & Kondisi', false);
+
+    // Physical asset badges
+    $res->assertSee('Workstation Lab AI #01');
+    $res->assertSee('Siklus Rawat: Triwulan (3 Bulan)');
+    $res->assertSee('Perlu Maintenance (H-5');
+
+    // Digital license badges
+    $res->assertSee('Lisensi Cloud LMS PuTI');
+    $res->assertSee('Digital / Lisensi');
+    $res->assertSee('Siklus: Tahunan');
+    $res->assertSee('Segera Diperbarui (H-10');
+});

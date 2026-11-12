@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\InventoryAssetType;
 use App\Enums\InventoryCondition;
 use App\Enums\InventoryStatus;
 use Database\Factories\InventoryItemFactory;
@@ -91,6 +92,8 @@ class InventoryItem extends Model
         'condition',
         'status',
         'last_maintained_at',
+        'maintenance_cycle',
+        'next_maintenance_date',
         'renewal_date',
         'billing_cycle',
         'access_url',
@@ -103,6 +106,7 @@ class InventoryItem extends Model
      */
     protected $casts = [
         'last_maintained_at' => 'datetime',
+        'next_maintenance_date' => 'date',
         'renewal_date' => 'date',
     ];
 
@@ -151,6 +155,12 @@ class InventoryItem extends Model
         return $this->conditionEnum()?->color() ?? 'gray';
     }
 
+    public function getConditionBadgeClassAttribute(): string
+    {
+        return $this->conditionEnum()?->badgeClass()
+            ?? 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700';
+    }
+
     public function statusEnum(): ?InventoryStatus
     {
         return InventoryStatus::tryFrom($this->status);
@@ -166,12 +176,31 @@ class InventoryItem extends Model
         return $this->statusEnum()?->color() ?? 'gray';
     }
 
+    public function getStatusBadgeClassAttribute(): string
+    {
+        return $this->statusEnum()?->badgeClass()
+            ?? 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700';
+    }
+
+    public function assetTypeEnum(): ?InventoryAssetType
+    {
+        return InventoryAssetType::tryFrom($this->asset_type);
+    }
+
     public function getAssetTypeLabelAttribute(): string
     {
-        return match ($this->asset_type) {
-            'digital' => 'Digital / Lisensi',
-            default => 'Fisik',
-        };
+        return $this->assetTypeEnum()?->label() ?? ucfirst($this->asset_type);
+    }
+
+    public function getAssetTypeIconAttribute(): string
+    {
+        return $this->assetTypeEnum()?->icon() ?? 'package';
+    }
+
+    public function getAssetTypeBadgeClassAttribute(): string
+    {
+        return $this->assetTypeEnum()?->badgeClass()
+            ?? 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-300 border border-gray-200 dark:border-gray-800';
     }
 
     public function getBillingCycleLabelAttribute(): ?string
@@ -181,6 +210,67 @@ class InventoryItem extends Model
             'yearly' => 'Tahunan',
             default => $this->billing_cycle,
         };
+    }
+
+    public function getMaintenanceCycleLabelAttribute(): ?string
+    {
+        return match ($this->maintenance_cycle) {
+            'monthly' => 'Bulanan',
+            'quarterly' => 'Triwulan (3 Bulan)',
+            'semester' => 'Semester (6 Bulan)',
+            'yearly' => 'Tahunan',
+            default => $this->maintenance_cycle,
+        };
+    }
+
+    public function isRenewalOverdue(): bool
+    {
+        return $this->renewal_date !== null && $this->renewal_date->startOfDay()->isPast();
+    }
+
+    public function isRenewalComingSoon(): bool
+    {
+        if ($this->renewal_date === null || $this->isRenewalOverdue()) {
+            return false;
+        }
+
+        $days = (int) now()->startOfDay()->diffInDays($this->renewal_date->startOfDay(), false);
+
+        return $days <= 30;
+    }
+
+    public function renewalDaysRemaining(): ?int
+    {
+        if ($this->renewal_date === null) {
+            return null;
+        }
+
+        return (int) now()->startOfDay()->diffInDays($this->renewal_date->startOfDay(), false);
+    }
+
+    public function isMaintenanceOverdue(): bool
+    {
+        return $this->next_maintenance_date !== null && $this->next_maintenance_date->startOfDay()->isPast();
+    }
+
+    public function isMaintenanceComingSoon(): bool
+    {
+        if ($this->next_maintenance_date === null || $this->isMaintenanceOverdue()) {
+            return false;
+        }
+
+        $days = (int) now()->startOfDay()->diffInDays($this->next_maintenance_date->startOfDay(), false);
+
+        return $days <= 14;
+    }
+
+    public function maintenanceDaysRemaining(): ?int
+    {
+        if ($this->next_maintenance_date === null) {
+            return null;
+        }
+
+        return (int) now()->startOfDay()->diffInDays($this->next_maintenance_date->startOfDay(), false);
     }
 
     public function getDisplayLocationAttribute(): string

@@ -144,6 +144,8 @@ class InventorySeeder extends Seeder
                 'location_detail' => 'Lab Komputer 204 Multimedia',
                 'condition' => 'good',
                 'status' => 'active',
+                'maintenance_cycle' => 'quarterly',
+                'next_maintenance_date' => now()->addDays(5)->format('Y-m-d'),
                 'notes' => 'Workstation untuk praktikum desain grafis dan komputasi visual.',
             ],
             [
@@ -158,6 +160,8 @@ class InventorySeeder extends Seeder
                 'location_detail' => 'Rack A-01 Server PuTI',
                 'condition' => 'good',
                 'status' => 'in_use',
+                'maintenance_cycle' => 'semester',
+                'next_maintenance_date' => now()->addMonths(4)->format('Y-m-d'),
                 'notes' => 'Switch distribusi utama backbone kampus.',
             ],
             [
@@ -172,6 +176,8 @@ class InventorySeeder extends Seeder
                 'location_detail' => 'Ruang Sidang Senat Lt. 1',
                 'condition' => 'good',
                 'status' => 'active',
+                'maintenance_cycle' => 'monthly',
+                'next_maintenance_date' => now()->addDays(12)->format('Y-m-d'),
                 'notes' => 'Digunakan berkala saat rapat rektorat dan senat.',
             ],
             [
@@ -186,7 +192,7 @@ class InventorySeeder extends Seeder
                 'location_detail' => 'Cloud / Zoom Admin Dashboard',
                 'condition' => 'good',
                 'status' => 'active',
-                'renewal_date' => now()->addYear()->format('Y-m-d'),
+                'renewal_date' => now()->addDays(20)->format('Y-m-d'),
                 'billing_cycle' => 'yearly',
                 'access_url' => 'https://zoom.us/signin',
                 'access_recipients' => 'Hak akses super-admin dipegang Kepala PuTI. Akun host didistribusikan untuk Dekanat Fakultas, Biro Akademik, dan Ruang Sidang.',
@@ -213,7 +219,7 @@ class InventorySeeder extends Seeder
         ];
 
         foreach ($items as $itemData) {
-            $item = InventoryItem::firstOrCreate(
+            $item = InventoryItem::updateOrCreate(
                 ['asset_code' => $itemData['asset_code']],
                 $itemData
             );

@@ -66,15 +66,68 @@
     </div>
   @endif
 
+  <!-- Top Hero Card for Physical Asset with Maintenance Schedule -->
+  @if($item->asset_type === 'physical' && ($item->maintenance_cycle || $item->next_maintenance_date))
+    <div class="bg-gradient-to-r from-blue-900 to-slate-900 text-white rounded-3xl p-6 shadow-md">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-xs font-bold uppercase tracking-wider backdrop-blur-sm">
+            <i data-lucide="wrench" class="w-3.5 h-3.5"></i>
+            <span>Jadwal Maintenance & Servis Berkala</span>
+          </span>
+          <h2 class="text-xl font-extrabold mt-2">{{ $item->name }}</h2>
+          <p class="text-xs text-blue-200 mt-1 font-mono">Kode Aset: {{ $item->asset_code }}</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          @if($item->isMaintenanceOverdue())
+            <span class="px-3.5 py-1.5 rounded-full bg-rose-500/90 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm">
+              <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+              <span>Jadwal Terlewat! Segera Lakukan Maintenance</span>
+            </span>
+          @elseif($item->isMaintenanceComingSoon())
+            <span class="px-3.5 py-1.5 rounded-full bg-amber-500 text-gray-950 text-xs font-bold flex items-center gap-1.5 shadow-sm animate-pulse">
+              <i data-lucide="clock" class="w-4 h-4"></i>
+              <span>Jatuh Tempo Maintenance (H-{{ $item->maintenanceDaysRemaining() }})</span>
+            </span>
+          @endif
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-5 border-t border-white/10 text-xs">
+        <div>
+          <p class="text-blue-300 font-semibold uppercase text-[10px]">Siklus Maintenance</p>
+          <p class="font-bold text-sm mt-0.5">{{ $item->maintenance_cycle_label ?? 'Tidak ditentukan' }}</p>
+        </div>
+        <div>
+          <p class="text-blue-300 font-semibold uppercase text-[10px]">Jadwal Rawat Berikutnya</p>
+          <p class="font-bold text-sm mt-0.5">
+            {{ $item->next_maintenance_date ? $item->next_maintenance_date->format('d M Y') : 'Belum diset' }}
+          </p>
+        </div>
+        <div>
+          <p class="text-blue-300 font-semibold uppercase text-[10px]">Lokasi Aset</p>
+          <p class="font-medium text-xs mt-0.5">{{ $item->display_location }}</p>
+        </div>
+      </div>
+    </div>
+  @endif
+
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Left Column: Asset Info & Edit Form -->
     <div class="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm space-y-4">
       <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
         <div>
-          <span class="font-mono text-xs font-bold text-purple-600 dark:text-purple-400">{{ $item->asset_code }}</span>
-          <h3 class="font-bold text-base text-gray-900 dark:text-white">{{ $item->name }}</h3>
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-xs font-bold text-purple-600 dark:text-purple-400">{{ $item->asset_code }}</span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold {{ $item->asset_type_badge_class }}">
+              <i data-lucide="{{ $item->asset_type_icon }}" class="w-3 h-3"></i>
+              {{ $item->asset_type_label }}
+            </span>
+          </div>
+          <h3 class="font-bold text-base text-gray-900 dark:text-white mt-0.5">{{ $item->name }}</h3>
         </div>
-        <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+        <span class="px-2.5 py-1 rounded-full text-xs font-bold border {{ $item->status_badge_class }}">
           {{ $item->status_label }}
         </span>
       </div>
@@ -167,6 +220,24 @@
               <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Detail Ruangan / Meja</label>
               <input type="text" name="location_detail" value="{{ $item->location_detail }}"
                 class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <div>
+                <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Siklus Maintenance</label>
+                <select name="maintenance_cycle" class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                  <option value="">-- Tanpa Rutin --</option>
+                  <option value="monthly" {{ $item->maintenance_cycle === 'monthly' ? 'selected' : '' }}>Bulanan</option>
+                  <option value="quarterly" {{ $item->maintenance_cycle === 'quarterly' ? 'selected' : '' }}>Triwulan (3 Bulan)</option>
+                  <option value="semester" {{ $item->maintenance_cycle === 'semester' ? 'selected' : '' }}>Semester (6 Bulan)</option>
+                  <option value="yearly" {{ $item->maintenance_cycle === 'yearly' ? 'selected' : '' }}>Tahunan</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Jadwal Rawat Berikutnya</label>
+                <input type="date" name="next_maintenance_date" value="{{ $item->next_maintenance_date?->format('Y-m-d') }}"
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+              </div>
             </div>
           </div>
         </template>

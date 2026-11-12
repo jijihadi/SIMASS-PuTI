@@ -41,3 +41,30 @@ test('sidebar remains scoped to current module when visiting profile or settings
         ->assertSee('SIMASS Presensi')
         ->assertDontSee('TICKETING');
 });
+
+test('sidebar renders module-specific accent color', function () {
+    $user = User::factory()->create();
+
+    // Presensi -> Red
+    $this->actingAs($user)
+        ->get('/presence/dashboard')
+        ->assertStatus(200)
+        ->assertSee('data-module="presensi"', false)
+        ->assertSee('--sidebar-accent: #b6252a', false);
+
+    // Inventaris -> Purple
+    $this->actingAs($user)
+        ->get('/inventory')
+        ->assertStatus(200)
+        ->assertSee('data-module="inventaris"', false)
+        ->assertSee('--sidebar-accent: #7c3aed', false)
+        ->assertSee('Inventaris PuTI');
+
+    // Ticketing -> Emerald
+    $this->actingAs($user)
+        ->get('/ticket')
+        ->assertStatus(200)
+        ->assertSee('data-module="ticketing"', false)
+        ->assertSee('--sidebar-accent: #059669', false)
+        ->assertSee('e-Ticket PuTI');
+});

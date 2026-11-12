@@ -166,12 +166,37 @@ html.dark .theme-toggle-moon {
 }
 
 .nav-item.active {
-    background: #b6252a;
+    background: var(--sidebar-accent, #b6252a);
     color: white;
 }
 
 .nav-item.active svg {
     color: white;
+}
+
+/* Sidebar Module-Specific Accents */
+#sidebar[data-module="inventaris"] {
+    --sidebar-accent: #7c3aed;
+    --sidebar-accent-hover: rgba(124, 58, 237, 0.08);
+    --sidebar-accent-shadow: rgba(124, 58, 237, 0.35);
+}
+
+#sidebar[data-module="ticketing"] {
+    --sidebar-accent: #059669;
+    --sidebar-accent-hover: rgba(5, 150, 105, 0.08);
+    --sidebar-accent-shadow: rgba(5, 150, 105, 0.35);
+}
+
+#sidebar[data-module="admin"] {
+    --sidebar-accent: #1e293b;
+    --sidebar-accent-hover: rgba(30, 41, 59, 0.08);
+    --sidebar-accent-shadow: rgba(30, 41, 59, 0.35);
+}
+
+#sidebar[data-module="presensi"] {
+    --sidebar-accent: #b6252a;
+    --sidebar-accent-hover: rgba(182, 37, 42, 0.08);
+    --sidebar-accent-shadow: rgba(182, 37, 42, 0.35);
 }
 
 .mobile-nav-item.active {
