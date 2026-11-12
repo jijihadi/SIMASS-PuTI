@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\TicketStatus;
 use App\Models\Presence;
 use App\Models\Ticket;
 use App\Models\User;
@@ -42,13 +43,14 @@ test('user can submit valid local ticket and ticket number is generated', functi
     expect($ticket)->not->toBeNull();
     expect($ticket->ticket_number)->toStartWith('TIC-');
     expect($ticket->scope)->toBe('internal_surabaya');
-    expect($ticket->status)->toBe('open');
+    expect($ticket->status)->toBe(TicketStatus::Open->value);
+    expect($ticket->user_status_label)->toBe('Diterima');
     expect($ticket->authority)->toBe('local');
 
     $response->assertRedirect(route('ticket.show', $ticket));
 });
 
-test('submitting central authority ticket routes to waiting_central and pauses SLA', function () {
+test('submitting central authority ticket routes to redirected and pauses SLA', function () {
     $user = User::factory()->create();
 
     $payload = [
@@ -66,8 +68,8 @@ test('submitting central authority ticket routes to waiting_central and pauses S
     expect($ticket)->not->toBeNull();
     expect($ticket->authority)->toBe('central');
     expect($ticket->scope)->toBe('escalated_central');
-    expect($ticket->status)->toBe('waiting_central');
-    expect($ticket->user_status_label)->toBe('Koordinasi Sistem Terpusat');
+    expect($ticket->status)->toBe(TicketStatus::Redirected->value);
+    expect($ticket->user_status_label)->toBe('Dialihkan ke Pusat');
     expect($ticket->sla_paused_at)->not->toBeNull();
 
     // Ensure Luna posted an informative message
@@ -76,7 +78,7 @@ test('submitting central authority ticket routes to waiting_central and pauses S
     expect($lunaMsg->message)->toContain('sistem terpusat');
 });
 
-test('submitting ambiguous local ticket routes to pending_user and requests clarification', function () {
+test('submitting ambiguous local ticket stays open with needs_clarification scope and pauses SLA', function () {
     $user = User::factory()->create();
 
     $payload = [
@@ -93,8 +95,9 @@ test('submitting ambiguous local ticket routes to pending_user and requests clar
     $ticket = Ticket::where('title', $payload['title'])->first();
     expect($ticket)->not->toBeNull();
     expect($ticket->scope)->toBe('needs_clarification');
-    expect($ticket->status)->toBe('pending_user');
-    expect($ticket->user_status_label)->toBe('Menunggu Tanggapan Anda');
+    expect($ticket->status)->toBe(TicketStatus::Open->value);
+    expect($ticket->needsClarification())->toBeTrue();
+    expect($ticket->user_status_label)->toBe('Diterima');
     expect($ticket->sla_paused_at)->not->toBeNull();
 
     // Ensure Luna posted a clarification request
@@ -103,20 +106,13 @@ test('submitting ambiguous local ticket routes to pending_user and requests clar
     expect($lunaMsg->message)->toContain('Gedung');
 });
 
-test('user reply on pending_user ticket restores status to open and resumes sla', function () {
+test('user reply on open ticket with needs_clarification restores internal scope and resumes sla', function () {
     $user = User::factory()->create();
 
-    $ticket = Ticket::create([
-        'ticket_number' => 'TIC-TEST-0001',
+    $ticket = Ticket::factory()->create([
         'user_id' => $user->id,
-        'category' => 'Jaringan & Internet',
-        'service_item' => 'Wi-Fi Kampus (Eduroam / TelU-Guest)',
-        'authority' => 'local',
         'scope' => 'needs_clarification',
-        'status' => 'pending_user',
-        'priority' => 'medium',
-        'title' => 'Wi-Fi Problem',
-        'description' => 'Internet mati',
+        'status' => TicketStatus::Open->value,
         'sla_paused_at' => now()->subMinutes(30),
     ]);
 
@@ -127,7 +123,7 @@ test('user reply on pending_user ticket restores status to open and resumes sla'
         ->assertRedirect();
 
     $ticket->refresh();
-    expect($ticket->status)->toBe('open');
+    expect($ticket->status)->toBe(TicketStatus::Open->value);
     expect($ticket->scope)->toBe('internal_surabaya');
     expect($ticket->sla_paused_at)->toBeNull();
 });
@@ -136,15 +132,8 @@ test('technician can manually override ticket scope between local and central', 
     $staff = User::factory()->create(['type' => 'Staf']);
     $user = User::factory()->create();
 
-    $ticket = Ticket::create([
-        'ticket_number' => 'TIC-TEST-0002',
+    $ticket = Ticket::factory()->inProgress()->create([
         'user_id' => $user->id,
-        'category' => 'Jaringan & Internet',
-        'service_item' => 'Wi-Fi Kampus (Eduroam / TelU-Guest)',
-        'authority' => 'local',
-        'scope' => 'internal_surabaya',
-        'status' => 'in_progress',
-        'priority' => 'high',
         'title' => 'Access Point Rusak',
         'description' => 'Lampu AP mati total di Ruang B301.',
     ]);
@@ -160,7 +149,7 @@ test('technician can manually override ticket scope between local and central', 
 
     $ticket->refresh();
     expect($ticket->scope)->toBe('escalated_central');
-    expect($ticket->status)->toBe('waiting_central');
+    expect($ticket->status)->toBe(TicketStatus::Redirected->value);
     expect($ticket->central_ticket_ref)->toBe('PST-9988');
 
     // 2. Override back to local
@@ -173,7 +162,128 @@ test('technician can manually override ticket scope between local and central', 
 
     $ticket->refresh();
     expect($ticket->scope)->toBe('internal_surabaya');
-    expect($ticket->status)->toBe('in_progress');
+    expect($ticket->status)->toBe(TicketStatus::InProgress->value);
+    expect($ticket->sla_due_at)->not->toBeNull();
+});
+
+test('staff can transition through valid statuses and reopen failed ticket', function () {
+    $staff = User::factory()->create(['type' => 'Staf']);
+    $ticket = Ticket::factory()->open()->create();
+
+    // open -> in_progress
+    $this->actingAs($staff)
+        ->patch("/ticket/{$ticket->id}/status", [
+            'status' => TicketStatus::InProgress->value,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $ticket->refresh();
+    expect($ticket->status)->toBe(TicketStatus::InProgress->value);
+    expect($ticket->assigned_to)->toBe($staff->id);
+
+    // in_progress -> failed (requires status_note)
+    $this->actingAs($staff)
+        ->patch("/ticket/{$ticket->id}/status", [
+            'status' => TicketStatus::Failed->value,
+        ])
+        ->assertSessionHasErrors('status_note');
+
+    $this->actingAs($staff)
+        ->patch("/ticket/{$ticket->id}/status", [
+            'status' => TicketStatus::Failed->value,
+            'status_note' => 'Switch pengganti masih menunggu pengadaan.',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $ticket->refresh();
+    expect($ticket->status)->toBe(TicketStatus::Failed->value);
+    expect($ticket->resolved_at)->not->toBeNull();
+
+    // failed -> in_progress (reopened)
+    $this->actingAs($staff)
+        ->patch("/ticket/{$ticket->id}/status", [
+            'status' => TicketStatus::InProgress->value,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $ticket->refresh();
+    expect($ticket->status)->toBe(TicketStatus::InProgress->value);
+    expect($ticket->resolved_at)->toBeNull();
+
+    // in_progress -> finished
+    $this->actingAs($staff)
+        ->patch("/ticket/{$ticket->id}/status", [
+            'status' => TicketStatus::Finished->value,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $ticket->refresh();
+    expect($ticket->status)->toBe(TicketStatus::Finished->value);
+    expect($ticket->resolved_at)->not->toBeNull();
+
+    // finished is final -> cannot transition back to in_progress
+    $this->actingAs($staff)
+        ->patch("/ticket/{$ticket->id}/status", [
+            'status' => TicketStatus::InProgress->value,
+        ])
+        ->assertSessionHasErrors('status');
+});
+
+test('staff canceling ticket to another campus unit requires freetext transferred_unit', function () {
+    $staff = User::factory()->create(['type' => 'Staf']);
+    $ticket = Ticket::factory()->inProgress()->create();
+
+    // Missing transferred_unit when cancel_reason is transferred_unit
+    $this->actingAs($staff)
+        ->patch("/ticket/{$ticket->id}/status", [
+            'status' => TicketStatus::Canceled->value,
+            'cancel_reason' => 'transferred_unit',
+        ])
+        ->assertSessionHasErrors('transferred_unit');
+
+    // Valid freetext unit
+    $this->actingAs($staff)
+        ->patch("/ticket/{$ticket->id}/status", [
+            'status' => TicketStatus::Canceled->value,
+            'cancel_reason' => 'transferred_unit',
+            'transferred_unit' => 'Bagian Logistik & Sarpras Kampus',
+            'status_note' => 'Kerusakan AC ruang server merupakan wewenang Sarpras.',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $ticket->refresh();
+    expect($ticket->status)->toBe(TicketStatus::Canceled->value);
+    expect($ticket->cancel_reason)->toBe('transferred_unit');
+    expect($ticket->transferred_unit)->toBe('Bagian Logistik & Sarpras Kampus');
+    expect($ticket->resolved_at)->not->toBeNull();
+});
+
+test('reporter can self-cancel ticket while open but not while in_progress', function () {
+    $user = User::factory()->create();
+    $openTicket = Ticket::factory()->open()->create(['user_id' => $user->id]);
+
+    $this->actingAs($user)
+        ->patch("/ticket/{$openTicket->id}/cancel", [
+            'status_note' => 'Sudah bisa konek setelah ganti kabel sendiri.',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $openTicket->refresh();
+    expect($openTicket->status)->toBe(TicketStatus::Canceled->value);
+    expect($openTicket->cancel_reason)->toBe('user_withdrawn');
+    expect($openTicket->resolved_at)->not->toBeNull();
+
+    // Cannot self-cancel when in_progress
+    $inProgressTicket = Ticket::factory()->inProgress()->create(['user_id' => $user->id]);
+
+    $this->actingAs($user)
+        ->patch("/ticket/{$inProgressTicket->id}/cancel", [
+            'status_note' => 'Mau batalin',
+        ])
+        ->assertSessionHasErrors('status');
+
+    $inProgressTicket->refresh();
+    expect($inProgressTicket->status)->toBe(TicketStatus::InProgress->value);
 });
 
 test('luna live suggestion and chat endpoints return valid json responses', function () {

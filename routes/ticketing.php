@@ -19,5 +19,7 @@ Route::prefix('ticket')->name('ticket.')->group(function () {
     Route::get('/{ticket}', [TicketingController::class, 'show'])->name('show');
     Route::post('/{ticket}/reply', [TicketingController::class, 'reply'])->name('reply');
     Route::patch('/{ticket}/status', [TicketingController::class, 'updateStatus'])->name('update-status');
+    Route::patch('/{ticket}/cancel', [TicketingController::class, 'cancel'])->name('cancel');
     Route::patch('/{ticket}/override-scope', [TicketingController::class, 'overrideScope'])->name('override-scope');
+    Route::patch('/{ticket}/link-inventory', [TicketingController::class, 'linkInventory'])->name('link-inventory');
 });

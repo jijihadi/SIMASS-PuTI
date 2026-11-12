@@ -14,5 +14,6 @@ class DatabaseSeeder extends Seeder
         $this->call(HolidaySeeder::class);
         $this->call(RoleUserSeeder::class);
         $this->call(PortalModuleSeeder::class);
+        $this->call(InventorySeeder::class);
     }
 }

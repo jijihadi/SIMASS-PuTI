@@ -39,6 +39,9 @@ Route::middleware('auth')->group(function () {
     // Ticketing Routes
     require __DIR__.'/ticketing.php';
 
+    // Inventory & Maintenance Routes
+    require __DIR__.'/inventory.php';
+
     // Admin Console Routes (Fase 2B)
     require __DIR__.'/admin.php';
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\CampusLocation;
+use App\Models\InventoryCategory;
 use App\Models\ServiceCatalog;
 use App\Models\Unit;
 use Illuminate\Http\RedirectResponse;
@@ -19,8 +20,9 @@ class MasterDataController extends Controller
         $units = Unit::withCount('users')->orderBy('name')->get();
         $locations = CampusLocation::with(['parent', 'children'])->orderBy('type')->orderBy('name')->get();
         $services = ServiceCatalog::orderBy('category')->orderBy('name')->get();
+        $inventoryCategories = InventoryCategory::withCount('items')->orderBy('id')->get();
 
-        return view('pages.admin.master-data.index', compact('units', 'locations', 'services'));
+        return view('pages.admin.master-data.index', compact('units', 'locations', 'services', 'inventoryCategories'));
     }
 
     // Units
@@ -98,5 +100,27 @@ class MasterDataController extends Controller
         $service->delete();
 
         return redirect()->route('admin.master-data.index', ['tab' => 'services'])->with('success', "Layanan {$name} berhasil dihapus.");
+    }
+
+    // Inventory Categories
+    public function storeInventoryCategory(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:100', 'unique:inventory_categories,name'],
+            'code' => ['nullable', 'string', 'max:50', 'unique:inventory_categories,code'],
+            'description' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $cat = InventoryCategory::create($validated);
+
+        return redirect()->route('admin.master-data.index', ['tab' => 'inventory-categories'])->with('success', "Kategori inventaris {$cat->name} berhasil ditambahkan!");
+    }
+
+    public function destroyInventoryCategory(InventoryCategory $category): RedirectResponse
+    {
+        $name = $category->name;
+        $category->delete();
+
+        return redirect()->route('admin.master-data.index', ['tab' => 'inventory-categories'])->with('success', "Kategori inventaris {$name} berhasil dihapus.");
     }
 }

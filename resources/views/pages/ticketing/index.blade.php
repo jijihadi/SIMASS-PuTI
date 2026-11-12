@@ -45,37 +45,37 @@
     <!-- In Progress -->
     <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
       <div class="flex items-center justify-between text-purple-600 dark:text-purple-400 text-xs font-semibold uppercase">
-        <span>Ditangani</span>
+        <span>Dikerjakan</span>
         <i data-lucide="clock" class="w-4 h-4"></i>
       </div>
       <p class="text-2xl font-extrabold text-gray-900 dark:text-white mt-2">{{ $stats['in_progress'] }}</p>
     </div>
 
-    <!-- Pending User -->
-    <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
-      <div class="flex items-center justify-between text-amber-600 dark:text-amber-400 text-xs font-semibold uppercase">
-        <span>Butuh Info</span>
-        <i data-lucide="alert-circle" class="w-4 h-4"></i>
-      </div>
-      <p class="text-2xl font-extrabold text-gray-900 dark:text-white mt-2">{{ $stats['pending_user'] }}</p>
-    </div>
-
-    <!-- Waiting Central -->
+    <!-- Redirected -->
     <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
       <div class="flex items-center justify-between text-orange-600 dark:text-orange-400 text-xs font-semibold uppercase">
-        <span>Koor. Pusat</span>
+        <span>Ke Pusat</span>
         <i data-lucide="network" class="w-4 h-4"></i>
       </div>
-      <p class="text-2xl font-extrabold text-gray-900 dark:text-white mt-2">{{ $stats['waiting_central'] }}</p>
+      <p class="text-2xl font-extrabold text-gray-900 dark:text-white mt-2">{{ $stats['redirected'] }}</p>
     </div>
 
-    <!-- Resolved -->
+    <!-- Finished -->
     <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
       <div class="flex items-center justify-between text-emerald-600 dark:text-emerald-400 text-xs font-semibold uppercase">
         <span>Selesai</span>
         <i data-lucide="check-circle-2" class="w-4 h-4"></i>
       </div>
-      <p class="text-2xl font-extrabold text-gray-900 dark:text-white mt-2">{{ $stats['resolved'] }}</p>
+      <p class="text-2xl font-extrabold text-gray-900 dark:text-white mt-2">{{ $stats['finished'] }}</p>
+    </div>
+
+    <!-- Failed & Canceled -->
+    <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
+      <div class="flex items-center justify-between text-rose-600 dark:text-rose-400 text-xs font-semibold uppercase">
+        <span>Gagal / Batal</span>
+        <i data-lucide="x-circle" class="w-4 h-4"></i>
+      </div>
+      <p class="text-2xl font-extrabold text-gray-900 dark:text-white mt-2">{{ $stats['failed'] + $stats['canceled'] }}</p>
     </div>
   </div>
 
@@ -179,6 +179,7 @@
                       'purple'  => 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-900',
                       'orange'  => 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900',
                       'emerald' => 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
+                      'rose'    => 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900',
                       'gray'    => 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
                     ];
                     $badgeStyle = $badgeStyles[$ticket->user_status_color] ?? $badgeStyles['gray'];

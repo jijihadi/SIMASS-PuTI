@@ -3,12 +3,12 @@
 @section('title', 'Data Master — Admin Console')
 
 @section('content')
-    <div class="space-y-6" x-data="{ tab: '{{ request()->query('tab', 'units') }}', unitModal: false, locationModal: false, serviceModal: false }" id="masterDataTabs">
+    <div class="space-y-6" x-data="{ tab: '{{ request()->query('tab', 'units') }}', unitModal: false, locationModal: false, serviceModal: false, categoryModal: false }" id="masterDataTabs">
         <div class="flex items-center justify-between">
             <div>
                 <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Data Master & SLA</h1>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Kelola data unit kerja, lokasi kampus, dan target
-                    SLA layanan PuTI.</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Kelola data unit kerja, lokasi kampus, target
+                    SLA layanan PuTI, dan kategori inventaris.</p>
             </div>
             <a href="{{ route('admin.dashboard') }}"
                 class="inline-flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors">
@@ -35,6 +35,12 @@
                     'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
                 class="pb-3 border-b-2 transition ml-4">
                 Katalog Layanan & SLA ({{ $services->count() }})
+            </button>
+            <button type="button" @click="tab = 'inventory-categories'; switchTab('inventory-categories')" id="btn-tab-inventory-categories"
+                :class="tab === 'inventory-categories' ? 'border-telkom-600 text-telkom-700 dark:border-telkom-500 dark:text-telkom-400' :
+                    'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+                class="pb-3 border-b-2 transition ml-4">
+                Kategori Inventaris ({{ $inventoryCategories->count() }})
             </button>
         </div>
 
@@ -325,12 +331,97 @@
                 </form>
             </div>
         </div>
+
+        {{-- TAB 4: INVENTORY CATEGORIES --}}
+        <div x-show="tab === 'inventory-categories'" id="pane-tab-inventory-categories" class="space-y-4">
+            <div class="flex justify-between items-center">
+                <h3 class="font-bold text-sm text-gray-900 dark:text-white">Daftar Kategori Inventaris</h3>
+                <x-button variant="primary" icon="plus" @click="categoryModal = true">
+                    Tambah Kategori
+                </x-button>
+            </div>
+
+            <div
+                class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+                <table class="w-full text-left text-xs text-gray-600 dark:text-gray-400">
+                    <thead
+                        class="bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 font-bold uppercase border-b border-gray-200 dark:border-gray-800">
+                        <tr>
+                            <th class="px-5 py-3.5">Nama Kategori</th>
+                            <th class="px-5 py-3.5">Kode</th>
+                            <th class="px-5 py-3.5">Deskripsi</th>
+                            <th class="px-5 py-3.5">Jumlah Aset</th>
+                            <th class="px-5 py-3.5 text-center">AKSI</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                        @forelse ($inventoryCategories as $cat)
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-850 transition-colors">
+                                <td class="px-5 py-3.5 font-bold text-gray-900 dark:text-white">{{ $cat->name }}</td>
+                                <td class="px-5 py-3.5 font-mono">{{ $cat->code ?? '-' }}</td>
+                                <td class="px-5 py-3.5">{{ $cat->description ?? '-' }}</td>
+                                <td class="px-5 py-3.5 font-bold text-purple-600">{{ $cat->items_count }}</td>
+                                <td class="px-5 py-3.5 text-center">
+                                    <form action="{{ route('admin.inventory-categories.destroy', $cat) }}" method="POST"
+                                        onsubmit="return confirm('Apakah Anda yakin ingin menghapus kategori ini?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="text-rose-500 hover:text-rose-700 font-semibold">
+                                            Hapus
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="5" class="px-5 py-8 text-center text-gray-500">
+                                    Belum ada kategori inventaris.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {{-- Modal Tambah Kategori Inventaris --}}
+        <div x-show="categoryModal"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" x-cloak>
+            <div @click.away="categoryModal = false"
+                class="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-200 dark:border-gray-800 space-y-4">
+                <h3 class="font-bold text-base text-gray-900 dark:text-white">Tambah Kategori Inventaris Baru</h3>
+                <form action="{{ route('admin.inventory-categories.store') }}" method="POST" class="space-y-3 text-xs">
+                    @csrf
+                    <div>
+                        <label class="block font-bold mb-1 text-gray-700 dark:text-gray-300">Nama Kategori *</label>
+                        <input type="text" name="name" required placeholder="Contoh: Drone & Robotik"
+                            class="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-2.5 text-gray-900 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1 text-gray-700 dark:text-gray-300">Kode Kategori</label>
+                        <input type="text" name="code" placeholder="Contoh: ROB"
+                            class="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-2.5 text-gray-900 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1 text-gray-700 dark:text-gray-300">Deskripsi</label>
+                        <textarea name="description" rows="2" placeholder="Keterangan singkat kategori..."
+                            class="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-2.5 text-gray-900 dark:text-white"></textarea>
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button type="button" @click="categoryModal = false"
+                            class="px-4 py-2 text-xs font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">Batal</button>
+                        <button type="submit"
+                            class="px-4 py-2 text-xs font-semibold rounded-xl bg-telkom-600 hover:bg-telkom-700 text-white">Simpan Kategori</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
     @push('scripts')
         <script>
             function switchTab(name) {
-                ['units', 'locations', 'services'].forEach(t => {
+                ['units', 'locations', 'services', 'inventory-categories'].forEach(t => {
                     const pane = document.getElementById('pane-tab-' + t);
                     const btn = document.getElementById('btn-tab-' + t);
                     if (pane) {

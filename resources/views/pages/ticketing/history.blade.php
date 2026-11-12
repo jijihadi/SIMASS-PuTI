@@ -36,11 +36,12 @@
         <label for="status" class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Status Tiket</label>
         <select name="status" id="status" class="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs">
           <option value="">-- Semua Status --</option>
-          <option value="resolved" {{ request('status') === 'resolved' ? 'selected' : '' }}>Selesai Ditangani (Resolved)</option>
-          <option value="closed" {{ request('status') === 'closed' ? 'selected' : '' }}>Tiket Ditutup (Closed)</option>
-          <option value="waiting_central" {{ request('status') === 'waiting_central' ? 'selected' : '' }}>Koordinasi Pusat (Waiting Central)</option>
-          <option value="in_progress" {{ request('status') === 'in_progress' ? 'selected' : '' }}>Sedang Ditangani (In Progress)</option>
-          <option value="open" {{ request('status') === 'open' ? 'selected' : '' }}>Laporan Diterima (Open)</option>
+          <option value="finished" {{ request('status') === 'finished' ? 'selected' : '' }}>Selesai (Finished)</option>
+          <option value="canceled" {{ request('status') === 'canceled' ? 'selected' : '' }}>Dibatalkan (Canceled)</option>
+          <option value="failed" {{ request('status') === 'failed' ? 'selected' : '' }}>Gagal Ditangani (Failed)</option>
+          <option value="redirected" {{ request('status') === 'redirected' ? 'selected' : '' }}>Dialihkan ke Pusat (Redirected)</option>
+          <option value="in_progress" {{ request('status') === 'in_progress' ? 'selected' : '' }}>Sedang Dikerjakan (On Progress)</option>
+          <option value="open" {{ request('status') === 'open' ? 'selected' : '' }}>Diterima (Open)</option>
         </select>
       </div>
 
@@ -106,6 +107,7 @@
                       'purple'  => 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-900',
                       'orange'  => 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900',
                       'emerald' => 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
+                      'rose'    => 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900',
                       'gray'    => 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
                     ];
                     $badgeStyle = $badgeStyles[$ticket->user_status_color] ?? $badgeStyles['gray'];

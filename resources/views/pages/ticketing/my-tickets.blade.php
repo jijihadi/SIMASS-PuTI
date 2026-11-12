@@ -22,12 +22,13 @@
     @php
       $currentStatus = request()->query('status', '');
       $tabs = [
-        ''                => 'Semua Tiket',
-        'open'            => 'Laporan Diterima',
-        'pending_user'    => 'Menunggu Tanggapan Anda',
-        'in_progress'     => 'Sedang Ditangani',
-        'waiting_central' => 'Koordinasi Pusat',
-        'resolved'        => 'Selesai',
+        ''            => 'Semua Tiket',
+        'open'        => 'Diterima',
+        'in_progress' => 'Sedang Dikerjakan',
+        'redirected'  => 'Dialihkan ke Pusat',
+        'finished'    => 'Selesai',
+        'failed'      => 'Gagal Ditangani',
+        'canceled'    => 'Dibatalkan',
       ];
     @endphp
 
@@ -94,6 +95,7 @@
                       'purple'  => 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-900',
                       'orange'  => 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900',
                       'emerald' => 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
+                      'rose'    => 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900',
                       'gray'    => 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
                     ];
                     $badgeStyle = $badgeStyles[$ticket->user_status_color] ?? $badgeStyles['gray'];

@@ -212,12 +212,19 @@ timeline
      - Grafik distribusi domain (.ac.id, .edu, .org, .com), rasio anchor text, dan histori efektivitas kampanye link.
      - Ekspor laporan bulanan berkala untuk pimpinan.
 
-### Fase 5: Inventaris PuTI ⚪ *(Mendatang / Coming Soon)*
-- **Fungsi Utama**: Sentralisasi manajemen aset infrastruktur IT fisik dan digital PuTI Surabaya.
+### Fase 5: Inventaris PuTI 🟡 *(Sedang Berjalan / Terintegrasi e-Ticket)*
+- **Fungsi Utama**: Sentralisasi manajemen aset infrastruktur IT **fisik** dan **digital (lisensi/SSL)** PuTI Surabaya yang tersinkronisasi dua arah dengan modul **e-Ticket PuTI**.
 - **Fitur Kunci**:
-  - Katalog server fisik, access point, switch, router, dan perangkat lab IT.
-  - Tracking lisensi software institusi (jumlah kursi, tanggal aktivasi, perpanjangan).
-  - Monitoring sertifikat SSL domain & sub-domain dengan notifikasi peringatan kedaluwarsa otomatis.
+  1. **Katalog Aset Fisik & Digital (`asset_type: physical | digital`)**:
+     - **Aset Fisik (`physical`)**: Pencatatan kategori barang, merk/model, serial number, lokasi terstruktur berdasarkan **Gedung / Lantai / Ruangan** (`CampusLocation`), status operasional (`active`, `in_use`, `spare`, `maintenance`, `retired`), kondisi fisik (`good`, `maintenance`, `damaged`, `retired`), dan keterangan detail.
+     - **Aset Digital / Lisensi (`digital`)**: Pencatatan lisensi software & sertifikat SSL dengan informasi tanggal pembaruan (`renewal_date`), siklus langganan **Bulanan atau Tahunan** (`billing_cycle: monthly | yearly`), **Alamat Akses / Portal URL** (`access_url`), serta field **Keterangan Penerima Akses** (`access_Assigned_to` / `notes`) untuk mencatat daftar pengguna/unit yang diberikan akses.
+  2. **Bulk Input & Import Excel / CSV**:
+     - Input banyak aset sekaligus (form multi-baris) dan **Import File Excel (`.xlsx` / `.csv`)** beserta unduhan template standar agar staf dapat mengunggah ratusan aset lab/lisensi dalam satu langkah.
+  3. **Unified Maintenance & Bulk Maintenance (Satu Fitur Terpadu)**:
+     - Pengelolaan **Single Maintenance** dan **Bulk Maintenance** digabungkan dalam satu halaman/fitur terpadu (`/inventory/maintenances` dengan tab *Maintenance Satuan* & *Bulk Maintenance Massal*), dilengkapi sinkronisasi otomatis ke kondisi/status aset dan pembuatan tiket perbaikan otomatis untuk unit yang rusak.
+  4. **Mutasi / Pindah Lokasi, Status & Kondisi (Filter Gedung / Lantai) + Audit History Lengkap**:
+     - Fitur **Mutasi & Update Aset** (satuan maupun massal berdasarkan filter **Gedung / Lantai**) untuk memindahkan lokasi, mengubah status, atau memperbarui kondisi barang.
+     - Tabel **`inventory_histories`** mencatat rekam jejak lengkap (*siapa, kapan, nilai sebelum & sesudah, serta keterangan*) untuk setiap perubahan **Lokasi**, **Kondisi**, dan **Status** barang—baik yang dilakukan manual, lewat mutasi gedung/lantai, maupun otomatis dari perubahan status e-Ticket.
 
 ### Fase 6: NING (Network Monitoring) ⚪ *(Aplikasi Eksisting / Integrasi Mendatang)*
 - **Fungsi Utama**: Sistem pemantauan jaringan operasional PuTI Surabaya yang memantau performa, latensi, dan ketersediaan perangkat keras jaringan (Access Point, Switch, Router, Firewall, Server) di seluruh area Telkom University Surabaya. Aplikasi NING sudah selesai dan berjalan mandiri (*already fixed*), sehingga fase ini murni berfokus pada integrasi jembatan telemetri (*telemetry bridge*) ke e-Ticket PuTI dan Public Service Dashboard.

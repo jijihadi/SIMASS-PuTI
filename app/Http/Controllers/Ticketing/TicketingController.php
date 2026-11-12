@@ -2,23 +2,29 @@
 
 namespace App\Http\Controllers\Ticketing;
 
+use App\Enums\TicketStatus;
 use App\Http\Controllers\Controller;
+use App\Models\InventoryItem;
 use App\Models\Ticket;
 use App\Models\TicketMessage;
 use App\Models\TicketSlaLog;
+use App\Services\InventorySyncService;
 use App\Services\LunaAiService;
 use App\Services\TicketAssignmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class TicketingController extends Controller
 {
     public function __construct(
         public LunaAiService $lunaAi,
-        public TicketAssignmentService $assignmentService
+        public TicketAssignmentService $assignmentService,
+        public InventorySyncService $inventorySync
     ) {}
 
     /**
@@ -33,11 +39,12 @@ class TicketingController extends Controller
 
         $stats = [
             'total' => (clone $baseQuery)->count(),
-            'open' => (clone $baseQuery)->where('status', 'open')->count(),
-            'in_progress' => (clone $baseQuery)->where('status', 'in_progress')->count(),
-            'pending_user' => (clone $baseQuery)->where('status', 'pending_user')->count(),
-            'waiting_central' => (clone $baseQuery)->where('status', 'waiting_central')->count(),
-            'resolved' => (clone $baseQuery)->whereIn('status', ['resolved', 'closed'])->count(),
+            'open' => (clone $baseQuery)->where('status', TicketStatus::Open->value)->count(),
+            'in_progress' => (clone $baseQuery)->where('status', TicketStatus::InProgress->value)->count(),
+            'redirected' => (clone $baseQuery)->where('status', TicketStatus::Redirected->value)->count(),
+            'finished' => (clone $baseQuery)->where('status', TicketStatus::Finished->value)->count(),
+            'failed' => (clone $baseQuery)->where('status', TicketStatus::Failed->value)->count(),
+            'canceled' => (clone $baseQuery)->where('status', TicketStatus::Canceled->value)->count(),
         ];
 
         $recentTickets = (clone $baseQuery)
@@ -55,8 +62,11 @@ class TicketingController extends Controller
     public function create(): View
     {
         $services = Ticket::SERVICES;
+        $inventoryItems = InventoryItem::where('condition', '!=', 'retired')
+            ->orderBy('asset_code')
+            ->get();
 
-        return view('pages.ticketing.create', compact('services'));
+        return view('pages.ticketing.create', compact('services', 'inventoryItems'));
     }
 
     /**
@@ -70,6 +80,7 @@ class TicketingController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'required|string|min:5',
             'location' => 'nullable|string|max:255',
+            'inventory_item_id' => 'nullable|exists:inventory_items,id',
             'priority' => 'required|in:low,medium,high,urgent',
             'attachment' => 'nullable|file|mimes:jpeg,png,jpg,webp,pdf|max:5120',
         ]);
@@ -79,13 +90,19 @@ class TicketingController extends Controller
             $attachmentPath = $request->file('attachment')->store('tickets/attachments', 'public');
         }
 
+        $linkedItem = ! empty($validated['inventory_item_id'])
+            ? InventoryItem::find($validated['inventory_item_id'])
+            : null;
+
+        $resolvedLocation = $validated['location'] ?? ($linkedItem?->display_location !== '-' ? $linkedItem?->display_location : null);
+
         // 1. Determine Authority from Service Catalog
         $authority = Ticket::SERVICES[$validated['category']][$validated['service_item']]['authority'] ?? 'local';
 
         // 2. Evaluate Ambiguity with Luna AI
         $ambiguityMsg = $this->lunaAi->evaluateAmbiguity(
             $validated['description'],
-            $validated['location'] ?? null,
+            $resolvedLocation,
             $authority
         );
 
@@ -97,15 +114,15 @@ class TicketingController extends Controller
 
         if ($authority === 'central') {
             $scope = 'escalated_central';
-            $status = 'waiting_central';
+            $status = TicketStatus::Redirected->value;
             $slaPausedAt = $now;
         } elseif ($ambiguityMsg !== null) {
             $scope = 'needs_clarification';
-            $status = 'pending_user';
+            $status = TicketStatus::Open->value;
             $slaPausedAt = $now;
         } else {
             $scope = 'internal_surabaya';
-            $status = 'open';
+            $status = TicketStatus::Open->value;
             $assignedTo = $this->assignmentService->assignTechnician()?->id;
 
             // SLA Hours based on priority
@@ -122,6 +139,7 @@ class TicketingController extends Controller
         $ticket = Ticket::create([
             'ticket_number' => Ticket::generateTicketNumber(),
             'user_id' => Auth::id(),
+            'inventory_item_id' => $linkedItem?->id,
             'assigned_to' => $assignedTo,
             'category' => $validated['category'],
             'service_item' => $validated['service_item'],
@@ -129,13 +147,18 @@ class TicketingController extends Controller
             'scope' => $scope,
             'status' => $status,
             'priority' => $validated['priority'],
-            'location' => $validated['location'] ?? null,
+            'location' => $resolvedLocation,
             'title' => $validated['title'],
             'description' => $validated['description'],
             'attachment' => $attachmentPath,
+            'source_channel' => 'web',
             'sla_due_at' => $slaDueAt,
             'sla_paused_at' => $slaPausedAt,
         ]);
+
+        if ($linkedItem) {
+            $this->inventorySync->syncFromTicket($ticket, Auth::user());
+        }
 
         // 5. Initial User Message
         TicketMessage::create([
@@ -210,9 +233,12 @@ class TicketingController extends Controller
             abort(403, 'Anda tidak memiliki akses ke tiket ini.');
         }
 
-        $ticket->load(['user', 'assignee', 'messages.user', 'slaLogs.creator']);
+        $ticket->load(['user', 'assignee', 'inventoryItem', 'maintenances.performer', 'messages.user', 'slaLogs.creator']);
+        $inventoryItems = InventoryItem::where('condition', '!=', 'retired')
+            ->orderBy('asset_code')
+            ->get();
 
-        return view('pages.ticketing.show', compact('ticket', 'isStaff'));
+        return view('pages.ticketing.show', compact('ticket', 'isStaff', 'inventoryItems'));
     }
 
     /**
@@ -225,6 +251,12 @@ class TicketingController extends Controller
 
         if (! $isStaff && $ticket->user_id !== $user->id) {
             abort(403, 'Akses ditolak.');
+        }
+
+        if ($ticket->isFinalStatus()) {
+            throw ValidationException::withMessages([
+                'message' => 'Tiket ini sudah selesai atau dibatalkan dan tidak dapat menerima balasan baru.',
+            ]);
         }
 
         $validated = $request->validate([
@@ -250,8 +282,8 @@ class TicketingController extends Controller
             'is_internal' => $isInternal,
         ]);
 
-        // If user replies while ticket was waiting for user, resume SLA and activate ticket
-        if (! $isStaff && $ticket->status === 'pending_user') {
+        // If user replies while ticket was waiting for clarification, resume SLA and activate ticket
+        if (! $isStaff && $ticket->needsClarification()) {
             $now = now();
             $pausedMinutes = 0;
 
@@ -275,7 +307,7 @@ class TicketingController extends Controller
             $assigneeId = $ticket->assigned_to ?: $this->assignmentService->assignTechnician()?->id;
 
             $ticket->update([
-                'status' => 'open',
+                'status' => TicketStatus::Open->value,
                 'scope' => 'internal_surabaya',
                 'assigned_to' => $assigneeId,
                 'sla_due_at' => $newDueAt,
@@ -306,70 +338,171 @@ class TicketingController extends Controller
         }
 
         $validated = $request->validate([
-            'status' => 'required|in:open,in_progress,pending_user,waiting_central,resolved,closed',
-            'central_ticket_ref' => 'nullable|string|max:100',
+            'status' => ['required', Rule::enum(TicketStatus::class)],
+            'central_ticket_ref' => ['nullable', 'string', 'max:100'],
+            'cancel_reason' => ['nullable', 'required_if:status,canceled', 'in:user_withdrawn,transferred_unit'],
+            'transferred_unit' => ['nullable', 'required_if:cancel_reason,transferred_unit', 'string', 'max:150'],
+            'status_note' => ['nullable', 'required_if:status,failed', 'string', 'min:5', 'max:1000'],
         ]);
 
-        $oldStatus = $ticket->status;
-        $newStatus = $validated['status'];
-        $now = now();
+        $currentEnum = $ticket->statusEnum() ?? TicketStatus::Open;
+        $newEnum = TicketStatus::from($validated['status']);
 
-        $updateData = ['status' => $newStatus];
+        if ($currentEnum === $newEnum || ! $currentEnum->canTransitionTo($newEnum)) {
+            throw ValidationException::withMessages([
+                'status' => "Perubahan status dari {$currentEnum->label()} ke {$newEnum->label()} tidak diizinkan.",
+            ]);
+        }
+
+        $now = now();
+        $updateData = [
+            'status' => $newEnum->value,
+        ];
 
         if (! empty($validated['central_ticket_ref'])) {
             $updateData['central_ticket_ref'] = $validated['central_ticket_ref'];
         }
 
+        if (! empty($validated['status_note'])) {
+            $updateData['status_note'] = $validated['status_note'];
+        }
+
+        if ($newEnum === TicketStatus::Canceled) {
+            $updateData['cancel_reason'] = $validated['cancel_reason'];
+            $updateData['transferred_unit'] = $validated['cancel_reason'] === 'transferred_unit'
+                ? $validated['transferred_unit']
+                : null;
+        }
+
+        if ($newEnum === TicketStatus::Redirected) {
+            $updateData['scope'] = 'escalated_central';
+            $updateData['authority'] = 'central';
+        } elseif ($currentEnum === TicketStatus::Redirected && $newEnum === TicketStatus::InProgress) {
+            $updateData['scope'] = 'internal_surabaya';
+            $updateData['authority'] = 'local';
+        } elseif ($ticket->scope === 'needs_clarification' && $newEnum === TicketStatus::InProgress) {
+            $updateData['scope'] = 'internal_surabaya';
+        }
+
         // SLA Handling based on transition
-        if (in_array($newStatus, ['pending_user', 'waiting_central']) && ! in_array($oldStatus, ['pending_user', 'waiting_central'])) {
-            // Pausing SLA
+        if ($newEnum->pausesSla() && ! $ticket->sla_paused_at) {
             $updateData['sla_paused_at'] = $now;
-            $reason = $newStatus === 'pending_user' ? 'Menunggu Tanggapan Pelapor' : 'Koordinasi Sistem Terpusat';
 
             TicketSlaLog::create([
                 'ticket_id' => $ticket->id,
                 'paused_at' => $now,
-                'reason' => $reason,
+                'reason' => 'Koordinasi Sistem Terpusat',
                 'created_by' => $user->id,
             ]);
-        } elseif (in_array($oldStatus, ['pending_user', 'waiting_central']) && ! in_array($newStatus, ['pending_user', 'waiting_central'])) {
-            // Resuming SLA
-            if ($ticket->sla_paused_at) {
-                $duration = (int) $ticket->sla_paused_at->diffInMinutes($now);
-                if ($ticket->sla_due_at) {
-                    $updateData['sla_due_at'] = $ticket->sla_due_at->copy()->addMinutes($duration);
-                }
-
-                $activeLog = $ticket->slaLogs()->whereNull('resumed_at')->latest()->first();
-                if ($activeLog) {
-                    $activeLog->update([
-                        'resumed_at' => $now,
-                        'duration_minutes' => $duration,
-                    ]);
-                }
+        } elseif (! $newEnum->pausesSla() && $ticket->sla_paused_at) {
+            $duration = (int) $ticket->sla_paused_at->diffInMinutes($now);
+            if ($ticket->sla_due_at && ! $newEnum->stopsSla()) {
+                $updateData['sla_due_at'] = $ticket->sla_due_at->copy()->addMinutes($duration);
+            } elseif (! $ticket->sla_due_at && $newEnum === TicketStatus::InProgress) {
+                $updateData['sla_due_at'] = $now->copy()->addHours(24);
             }
+
+            $activeLog = $ticket->slaLogs()->whereNull('resumed_at')->latest()->first();
+            if ($activeLog) {
+                $activeLog->update([
+                    'resumed_at' => $now,
+                    'duration_minutes' => $duration,
+                ]);
+            }
+
             $updateData['sla_paused_at'] = null;
         }
 
-        if (in_array($newStatus, ['resolved', 'closed']) && ! $ticket->resolved_at) {
+        if ($newEnum->stopsSla()) {
             $updateData['resolved_at'] = $now;
+        } elseif ($currentEnum === TicketStatus::Failed && $newEnum === TicketStatus::InProgress) {
+            $updateData['resolved_at'] = null;
         }
 
         // Auto claim ticket if staff moves it to in_progress and not assigned
-        if ($newStatus === 'in_progress' && ! $ticket->assigned_to) {
+        if ($newEnum === TicketStatus::InProgress && ! $ticket->assigned_to) {
             $updateData['assigned_to'] = $user->id;
         }
 
         $ticket->update($updateData);
+        $this->inventorySync->syncFromTicket($ticket, $user, $validated['status_note'] ?? null);
+
+        $detailNote = '';
+        if ($newEnum === TicketStatus::Canceled) {
+            if ($ticket->cancel_reason === 'transferred_unit' && $ticket->transferred_unit) {
+                $detailNote = " (Dialihkan ke unit kampus: **{$ticket->transferred_unit}**)";
+            } else {
+                $detailNote = ' (Dibatalkan / diselesaikan mandiri oleh pelapor)';
+            }
+        }
+        if (! empty($validated['status_note'])) {
+            $detailNote .= "\n\n*Catatan:* {$validated['status_note']}";
+        }
 
         TicketMessage::create([
             'ticket_id' => $ticket->id,
             'user_id' => $user->id,
             'sender_type' => 'system',
-            'message' => "ℹ️ **Status Diperbarui:** Status tiket diubah menjadi **{$ticket->user_status_label}** oleh **{$user->name}**.",
+            'message' => "ℹ️ **Status Diperbarui:** Status tiket diubah menjadi **{$ticket->user_status_label}** oleh **{$user->name}**{$detailNote}.",
         ]);
 
         return back()->with('success', 'Status tiket berhasil diperbarui.');
+    }
+
+    /**
+     * Self-Cancel Ticket (Reporter only, while status is open)
+     */
+    public function cancel(Request $request, Ticket $ticket): RedirectResponse
+    {
+        $user = Auth::user();
+
+        if ($ticket->user_id !== $user->id) {
+            abort(403, 'Hanya pelapor yang dapat membatalkan tiket ini.');
+        }
+
+        if ($ticket->status !== TicketStatus::Open->value) {
+            throw ValidationException::withMessages([
+                'status' => 'Tiket hanya dapat dibatalkan selama berstatus Diterima (Open).',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'status_note' => 'nullable|string|max:500',
+        ]);
+
+        $now = now();
+
+        if ($ticket->sla_paused_at) {
+            $duration = (int) $ticket->sla_paused_at->diffInMinutes($now);
+            $activeLog = $ticket->slaLogs()->whereNull('resumed_at')->latest()->first();
+            if ($activeLog) {
+                $activeLog->update([
+                    'resumed_at' => $now,
+                    'duration_minutes' => $duration,
+                ]);
+            }
+        }
+
+        $ticket->update([
+            'status' => TicketStatus::Canceled->value,
+            'cancel_reason' => 'user_withdrawn',
+            'status_note' => $validated['status_note'] ?? null,
+            'sla_paused_at' => null,
+            'resolved_at' => $now,
+        ]);
+
+        $this->inventorySync->syncFromTicket($ticket, $user, $validated['status_note'] ?? null);
+
+        $noteSuffix = ! empty($validated['status_note']) ? "\n\n*Catatan pelapor:* {$validated['status_note']}" : '';
+
+        TicketMessage::create([
+            'ticket_id' => $ticket->id,
+            'user_id' => $user->id,
+            'sender_type' => 'system',
+            'message' => "🚫 **Tiket Dibatalkan:** Pelapor (**{$user->name}**) membatalkan tiket ini karena kendala telah teratasi atau tidak lagi memerlukan penanganan.{$noteSuffix}",
+        ]);
+
+        return back()->with('success', 'Tiket berhasil dibatalkan.');
     }
 
     /**
@@ -384,6 +517,12 @@ class TicketingController extends Controller
             abort(403, 'Akses ditolak.');
         }
 
+        if ($ticket->isFinalStatus()) {
+            throw ValidationException::withMessages([
+                'scope' => 'Tiket yang sudah selesai atau dibatalkan tidak dapat diubah wewenangnya.',
+            ]);
+        }
+
         $validated = $request->validate([
             'scope' => 'required|in:internal_surabaya,escalated_central',
             'override_notes' => 'required|string|min:5',
@@ -396,7 +535,7 @@ class TicketingController extends Controller
         if ($newScope === 'escalated_central') {
             $ticket->update([
                 'scope' => 'escalated_central',
-                'status' => 'waiting_central',
+                'status' => TicketStatus::Redirected->value,
                 'authority' => 'central',
                 'override_notes' => $validated['override_notes'],
                 'central_ticket_ref' => $validated['central_ticket_ref'] ?? $ticket->central_ticket_ref,
@@ -419,11 +558,13 @@ class TicketingController extends Controller
             ]);
         } else {
             // Revert back to local Surabaya
+            $newDueAt = $ticket->sla_due_at;
             if ($ticket->sla_paused_at) {
                 $duration = (int) $ticket->sla_paused_at->diffInMinutes($now);
-                if ($ticket->sla_due_at) {
-                    $ticket->sla_due_at = $ticket->sla_due_at->copy()->addMinutes($duration);
-                }
+                $newDueAt = $ticket->sla_due_at
+                    ? $ticket->sla_due_at->copy()->addMinutes($duration)
+                    : $now->copy()->addHours(24);
+
                 $activeLog = $ticket->slaLogs()->whereNull('resumed_at')->latest()->first();
                 if ($activeLog) {
                     $activeLog->update([
@@ -431,13 +572,16 @@ class TicketingController extends Controller
                         'duration_minutes' => $duration,
                     ]);
                 }
+            } elseif (! $newDueAt) {
+                $newDueAt = $now->copy()->addHours(24);
             }
 
             $ticket->update([
                 'scope' => 'internal_surabaya',
-                'status' => 'in_progress',
+                'status' => TicketStatus::InProgress->value,
                 'authority' => 'local',
                 'override_notes' => $validated['override_notes'],
+                'sla_due_at' => $newDueAt,
                 'sla_paused_at' => null,
                 'assigned_to' => $ticket->assigned_to ?: $user->id,
             ]);
@@ -450,7 +594,51 @@ class TicketingController extends Controller
             ]);
         }
 
+        $this->inventorySync->syncFromTicket($ticket, $user, $validated['override_notes']);
+
         return back()->with('success', 'Wewenang tiket berhasil dialihkan.');
+    }
+
+    /**
+     * Link or Unlink Inventory Asset on Ticket (Technician only)
+     */
+    public function linkInventory(Request $request, Ticket $ticket): RedirectResponse
+    {
+        $user = Auth::user();
+        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+
+        if (! $isStaff) {
+            abort(403, 'Akses ditolak.');
+        }
+
+        $validated = $request->validate([
+            'inventory_item_id' => 'nullable|exists:inventory_items,id',
+        ]);
+
+        $ticket->update([
+            'inventory_item_id' => $validated['inventory_item_id'] ?? null,
+        ]);
+
+        if ($ticket->inventory_item_id) {
+            $item = InventoryItem::find($ticket->inventory_item_id);
+            $this->inventorySync->syncFromTicket($ticket, $user);
+
+            TicketMessage::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $user->id,
+                'sender_type' => 'system',
+                'message' => "📦 **Sinkronisasi Inventaris:** Tiket ditautkan ke aset **{$item?->asset_code} ({$item?->name})** oleh **{$user->name}**.",
+            ]);
+        } else {
+            TicketMessage::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $user->id,
+                'sender_type' => 'system',
+                'message' => "📦 **Sinkronisasi Inventaris:** Tautan aset inventaris dilepas oleh **{$user->name}**.",
+            ]);
+        }
+
+        return back()->with('success', 'Tautan aset inventaris berhasil diperbarui.');
     }
 
     /**
@@ -466,27 +654,32 @@ class TicketingController extends Controller
         }
 
         $tab = $request->query('tab', 'all');
+        $finalStatuses = [TicketStatus::Finished->value, TicketStatus::Canceled->value];
 
         $query = Ticket::with(['user', 'assignee'])->latest();
 
         match ($tab) {
-            'unassigned' => $query->whereNull('assigned_to')->where('status', '!=', 'resolved')->where('status', '!=', 'closed'),
-            'pending_user' => $query->where('status', 'pending_user'),
-            'in_progress' => $query->where('status', 'in_progress'),
-            'waiting_central' => $query->where('status', 'waiting_central'),
-            'resolved' => $query->whereIn('status', ['resolved', 'closed']),
-            default => $query->whereNotIn('status', ['closed']),
+            'unassigned' => $query->whereNull('assigned_to')->whereNotIn('status', $finalStatuses),
+            'open' => $query->where('status', TicketStatus::Open->value),
+            'in_progress' => $query->where('status', TicketStatus::InProgress->value),
+            'redirected' => $query->where('status', TicketStatus::Redirected->value),
+            'finished' => $query->where('status', TicketStatus::Finished->value),
+            'failed' => $query->where('status', TicketStatus::Failed->value),
+            'canceled' => $query->where('status', TicketStatus::Canceled->value),
+            default => $query->whereNotIn('status', $finalStatuses),
         };
 
         $tickets = $query->paginate(15)->withQueryString();
 
         $counts = [
-            'all' => Ticket::whereNotIn('status', ['closed'])->count(),
-            'unassigned' => Ticket::whereNull('assigned_to')->whereNotIn('status', ['resolved', 'closed'])->count(),
-            'pending_user' => Ticket::where('status', 'pending_user')->count(),
-            'in_progress' => Ticket::where('status', 'in_progress')->count(),
-            'waiting_central' => Ticket::where('status', 'waiting_central')->count(),
-            'resolved' => Ticket::whereIn('status', ['resolved', 'closed'])->count(),
+            'all' => Ticket::whereNotIn('status', $finalStatuses)->count(),
+            'unassigned' => Ticket::whereNull('assigned_to')->whereNotIn('status', $finalStatuses)->count(),
+            'open' => Ticket::where('status', TicketStatus::Open->value)->count(),
+            'in_progress' => Ticket::where('status', TicketStatus::InProgress->value)->count(),
+            'redirected' => Ticket::where('status', TicketStatus::Redirected->value)->count(),
+            'finished' => Ticket::where('status', TicketStatus::Finished->value)->count(),
+            'failed' => Ticket::where('status', TicketStatus::Failed->value)->count(),
+            'canceled' => Ticket::where('status', TicketStatus::Canceled->value)->count(),
         ];
 
         return view('pages.ticketing.tasks', compact('tickets', 'tab', 'counts'));
@@ -498,7 +691,10 @@ class TicketingController extends Controller
     public function tasksPoll(): JsonResponse
     {
         $latestTicket = Ticket::latest()->first();
-        $activeCount = Ticket::whereNotIn('status', ['resolved', 'closed'])->count();
+        $activeCount = Ticket::whereNotIn('status', [
+            TicketStatus::Finished->value,
+            TicketStatus::Canceled->value,
+        ])->count();
 
         return response()->json([
             'latest_id' => $latestTicket?->id ?? 0,

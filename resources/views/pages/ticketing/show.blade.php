@@ -22,16 +22,24 @@
     </div>
   @endif
 
-  <!-- Supportive Banner if Waiting Central -->
-  @if($ticket->status === 'waiting_central')
+  @if($errors->any())
+    <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400 text-xs font-semibold space-y-1">
+      @foreach($errors->all() as $error)
+        <p class="flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 shrink-0"></i> {{ $error }}</p>
+      @endforeach
+    </div>
+  @endif
+
+  <!-- Supportive Status Banners -->
+  @if($ticket->status === 'redirected')
     <div class="p-5 rounded-3xl bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/40 dark:to-amber-950/30 border border-orange-200 dark:border-orange-900/50 flex items-start gap-4">
       <div class="w-10 h-10 rounded-2xl bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
         <i data-lucide="network" class="w-5 h-5"></i>
       </div>
       <div class="text-sm">
-        <h4 class="font-bold text-orange-900 dark:text-orange-200">Dalam Proses Koordinasi Sistem Terpusat (One Tel-U)</h4>
+        <h4 class="font-bold text-orange-900 dark:text-orange-200">Dialihkan ke Sistem Terpusat (Bandung)</h4>
         <p class="text-orange-800/80 dark:text-orange-300/80 text-xs mt-1 leading-relaxed">
-          Kendala ini memerlukan wewenang/sinkronisasi teknis pada sistem terpusat Telkom University. 
+          Kendala ini memerlukan wewenang/sinkronisasi teknis pada sistem terpusat Telkom University.
           Tim PuTI Surabaya bertindak sebagai pendamping Anda dan sedang mengawal tiket ini hingga selesai.
           @if($ticket->central_ticket_ref)
             <span class="block mt-1.5 font-mono font-bold text-xs text-orange-900 dark:text-orange-100 bg-orange-100/70 dark:bg-orange-900/60 px-2.5 py-1 rounded-lg w-fit">
@@ -41,7 +49,7 @@
         </p>
       </div>
     </div>
-  @elseif($ticket->status === 'pending_user')
+  @elseif($ticket->needsClarification())
     <div class="p-5 rounded-3xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-start gap-4">
       <div class="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
         <i data-lucide="alert-circle" class="w-5 h-5"></i>
@@ -50,6 +58,42 @@
         <h4 class="font-bold text-amber-900 dark:text-amber-200">Menunggu Informasi Tambahan dari Anda</h4>
         <p class="text-amber-800/80 dark:text-amber-300/80 text-xs mt-1 leading-relaxed">
           Teknisi atau asisten virtual kami membutuhkan detail tambahan (seperti nama ruangan atau gejala spesifik) agar penanganan dapat dilanjutkan. Silakan berikan balasan Anda pada kolom pesan di bawah.
+        </p>
+      </div>
+    </div>
+  @elseif($ticket->status === 'failed')
+    <div class="p-5 rounded-3xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-4">
+      <div class="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+        <i data-lucide="alert-octagon" class="w-5 h-5"></i>
+      </div>
+      <div class="text-sm">
+        <h4 class="font-bold text-rose-900 dark:text-rose-200">Kendala Belum Berhasil Diselesaikan (Gagal Ditangani)</h4>
+        <p class="text-rose-800/80 dark:text-rose-300/80 text-xs mt-1 leading-relaxed">
+          Penanganan telah dilakukan namun kendala belum sepenuhnya teratasi. Teknisi dapat membuka kembali (reopen) tiket ini untuk penanganan lanjutan.
+          @if($ticket->status_note)
+            <span class="block mt-1.5 font-medium text-xs text-rose-900 dark:text-rose-100 bg-rose-100/70 dark:bg-rose-900/60 px-2.5 py-1 rounded-lg w-fit">
+              Catatan: {{ $ticket->status_note }}
+            </span>
+          @endif
+        </p>
+      </div>
+    </div>
+  @elseif($ticket->status === 'canceled')
+    <div class="p-5 rounded-3xl bg-gray-100 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 flex items-start gap-4">
+      <div class="w-10 h-10 rounded-2xl bg-gray-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+        <i data-lucide="ban" class="w-5 h-5"></i>
+      </div>
+      <div class="text-sm">
+        <h4 class="font-bold text-gray-900 dark:text-gray-200">Tiket Dibatalkan</h4>
+        <p class="text-gray-600 dark:text-gray-400 text-xs mt-1 leading-relaxed">
+          @if($ticket->cancel_reason === 'transferred_unit' && $ticket->transferred_unit)
+            Tiket ini telah dialihkan penanganannya ke unit kampus terkait: <strong>{{ $ticket->transferred_unit }}</strong>.
+          @else
+            Tiket ini telah dibatalkan atau diselesaikan secara mandiri oleh pelapor.
+          @endif
+          @if($ticket->status_note)
+            <span class="block mt-1 text-gray-700 dark:text-gray-300 italic">"{{ $ticket->status_note }}"</span>
+          @endif
         </p>
       </div>
     </div>
@@ -158,7 +202,7 @@
         </div>
 
         <!-- Reply Box Form -->
-        @if(!in_array($ticket->status, ['closed']))
+        @if(!$ticket->isFinalStatus())
           <div class="pt-6 border-t border-gray-100 dark:border-gray-800">
             <form action="{{ route('ticket.reply', $ticket) }}" method="POST" enctype="multipart/form-data" class="space-y-4">
               @csrf
@@ -197,7 +241,7 @@
           </div>
         @else
           <div class="p-4 rounded-2xl bg-gray-100 dark:bg-gray-800 text-center text-xs text-gray-500">
-            Tiket ini telah ditutup. Tidak dapat menambahkan balasan baru.
+            Tiket ini telah {{ $ticket->status === 'finished' ? 'selesai ditangani' : 'dibatalkan' }}. Tidak dapat menambahkan balasan baru.
           </div>
         @endif
 
@@ -222,6 +266,7 @@
                 'purple'  => 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-900',
                 'orange'  => 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900',
                 'emerald' => 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
+                'rose'    => 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900',
                 'gray'    => 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
               ];
               $badgeStyle = $badgeStyles[$ticket->user_status_color] ?? $badgeStyles['gray'];
@@ -251,6 +296,33 @@
             </div>
           @endif
 
+          @if($ticket->transferred_unit)
+            <div class="flex items-center justify-between">
+              <span class="text-gray-500">Unit Tujuan:</span>
+              <span class="font-semibold text-gray-900 dark:text-white text-right">{{ $ticket->transferred_unit }}</span>
+            </div>
+          @endif
+
+          <!-- Aset Inventaris Tertaut -->
+          @if($ticket->inventoryItem)
+            <div class="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="text-gray-500">Aset Inventaris:</span>
+                <a href="{{ route('inventory.show', $ticket->inventoryItem) }}" class="font-mono font-bold text-purple-600 dark:text-purple-400 hover:underline">
+                  {{ $ticket->inventoryItem->asset_code }}
+                </a>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-500">Nama Aset:</span>
+                <span class="font-semibold text-gray-900 dark:text-white text-right">{{ $ticket->inventoryItem->name }}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-gray-500">Kondisi Aset:</span>
+                <span class="font-semibold text-gray-800 dark:text-gray-200">{{ $ticket->inventoryItem->condition_label }}</span>
+              </div>
+            </div>
+          @endif
+
           <!-- Pelapor -->
           <div class="pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
             <span class="text-gray-500">Pelapor:</span>
@@ -270,7 +342,7 @@
             <div class="pt-3 border-t border-gray-100 dark:border-gray-800">
               <div class="flex items-center justify-between">
                 <span class="text-gray-500">Target SLA:</span>
-                <span class="font-semibold {{ $ticket->sla_due_at->isPast() && !in_array($ticket->status, ['resolved', 'closed']) ? 'text-red-500' : 'text-gray-700 dark:text-gray-300' }}">
+                <span class="font-semibold {{ $ticket->sla_due_at->isPast() && !in_array($ticket->status, ['finished', 'canceled', 'failed']) ? 'text-red-500' : 'text-gray-700 dark:text-gray-300' }}">
                   {{ $ticket->sla_due_at->format('d M, H:i') }}
                 </span>
               </div>
@@ -282,55 +354,131 @@
             </div>
           @endif
         </div>
+
+        <!-- Reporter Self-Cancel Action (Only for Ticket Owner while status === 'open') -->
+        @if(auth()->id() === $ticket->user_id && $ticket->status === 'open')
+          <div class="pt-3 border-t border-gray-100 dark:border-gray-800">
+            <button type="button" onclick="document.getElementById('modalSelfCancel').classList.remove('hidden')"
+              class="w-full py-2 rounded-xl border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition flex items-center justify-center gap-1.5">
+              <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
+              <span>Batalkan Tiket Saya</span>
+            </button>
+          </div>
+        @endif
       </div>
 
       <!-- Technician Actions (Staff Only) -->
       @if($isStaff)
+        @php
+          $nextStatuses = $ticket->allowedNextStatuses();
+          $defaultNext = $nextStatuses[0]->value ?? $ticket->status;
+        @endphp
         <div class="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm space-y-4">
           <h3 class="font-bold text-sm text-purple-700 dark:text-purple-400 border-b border-gray-100 dark:border-gray-800 pb-3 flex items-center gap-1.5">
             <i data-lucide="shield" class="w-4 h-4"></i>
             <span>Kontrol Teknisi PuTI</span>
           </h3>
 
-          <!-- Update Status Form -->
-          <form action="{{ route('ticket.update-status', $ticket) }}" method="POST" class="space-y-3">
-            @csrf
-            @method('PATCH')
+          @if(empty($nextStatuses))
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              Tiket berstatus <strong>{{ $ticket->user_status_label }}</strong> bersifat final dan tidak dapat diubah lagi.
+            </p>
+          @else
+            <!-- Update Status Form -->
+            <form action="{{ route('ticket.update-status', $ticket) }}" method="POST" class="space-y-3"
+              x-data="{ selectedStatus: '{{ old('status', $defaultNext) }}', cancelReason: '{{ old('cancel_reason', 'transferred_unit') }}' }">
+              @csrf
+              @method('PATCH')
 
-            <div>
-              <label for="status" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                Ubah Status Pengerjaan
-              </label>
-              <select name="status" id="status" class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs font-medium">
-                <option value="open" {{ $ticket->status === 'open' ? 'selected' : '' }}>Laporan Diterima (Open)</option>
-                <option value="in_progress" {{ $ticket->status === 'in_progress' ? 'selected' : '' }}>Sedang Ditangani (In Progress)</option>
-                <option value="pending_user" {{ $ticket->status === 'pending_user' ? 'selected' : '' }}>Menunggu Tanggapan Pelapor (Pending User)</option>
-                <option value="waiting_central" {{ $ticket->status === 'waiting_central' ? 'selected' : '' }}>Koordinasi Sistem Terpusat (Waiting Central)</option>
-                <option value="resolved" {{ $ticket->status === 'resolved' ? 'selected' : '' }}>Selesai Ditangani (Resolved)</option>
-                <option value="closed" {{ $ticket->status === 'closed' ? 'selected' : '' }}>Tutup Tiket (Closed)</option>
-              </select>
+              <div>
+                <label for="status" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Ubah Status Pengerjaan
+                </label>
+                <select name="status" id="status" x-model="selectedStatus" class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs font-medium">
+                  @foreach($nextStatuses as $nextStatus)
+                    <option value="{{ $nextStatus->value }}">{{ $nextStatus->label() }} ({{ ucfirst(str_replace('_', ' ', $nextStatus->value)) }})</option>
+                  @endforeach
+                </select>
+              </div>
+
+              <!-- Redirected: Central Ticket Reference -->
+              <div x-show="selectedStatus === 'redirected'" x-cloak>
+                <label for="central_ticket_ref" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  No. Rujukan Helpdesk Pusat (Opsional)
+                </label>
+                <input type="text" name="central_ticket_ref" id="central_ticket_ref" value="{{ old('central_ticket_ref', $ticket->central_ticket_ref) }}" placeholder="PST-2026-xxx"
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs font-mono">
+              </div>
+
+              <!-- Canceled: Reason & Transferred Campus Unit -->
+              <div x-show="selectedStatus === 'canceled'" x-cloak class="space-y-3">
+                <div>
+                  <label for="cancel_reason" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Alasan Pembatalan <span class="text-red-500">*</span>
+                  </label>
+                  <select name="cancel_reason" id="cancel_reason" x-model="cancelReason"
+                    class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs font-medium">
+                    <option value="transferred_unit">Dialihkan ke Unit Lain di Kampus</option>
+                    <option value="user_withdrawn">Dibatalkan / Diselesaikan Pelapor</option>
+                  </select>
+                </div>
+
+                <div x-show="cancelReason === 'transferred_unit'" x-cloak>
+                  <label for="transferred_unit" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Nama Unit Kampus Tujuan <span class="text-red-500">*</span>
+                  </label>
+                  <input type="text" name="transferred_unit" id="transferred_unit" value="{{ old('transferred_unit', $ticket->transferred_unit) }}"
+                    placeholder="Contoh: Logistik / Sarpras / BAA / Keuangan"
+                    class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs">
+                </div>
+              </div>
+
+              <!-- Status Note (Required for Failed, Optional for others) -->
+              <div>
+                <label for="status_note" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Catatan Status <span x-show="selectedStatus === 'failed'" class="text-red-500">*</span>
+                </label>
+                <textarea name="status_note" id="status_note" rows="2"
+                  placeholder="Tambahkan catatan penanganan atau alasan gagal..."
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs">{{ old('status_note') }}</textarea>
+              </div>
+
+              <button type="submit" class="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs shadow-sm transition">
+                Simpan Perubahan Status
+              </button>
+            </form>
+
+            <!-- Manual Override Trigger -->
+            <div class="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
+              <button type="button" onclick="document.getElementById('modalOverride').classList.remove('hidden')"
+                class="w-full py-2 rounded-xl border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>Manual Override Wewenang</span>
+              </button>
             </div>
+          @endif
 
-            <div>
-              <label for="central_ticket_ref" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                No. Rujukan Helpdesk Pusat (Opsional)
-              </label>
-              <input type="text" name="central_ticket_ref" id="central_ticket_ref" value="{{ $ticket->central_ticket_ref }}" placeholder="PST-2026-xxx"
-                class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs font-mono">
-            </div>
-
-            <button type="submit" class="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs shadow-sm transition">
-              Simpan Perubahan Status
-            </button>
-          </form>
-
-          <!-- Manual Override Trigger -->
+          <!-- Link Inventory Asset Form -->
           <div class="pt-3 border-t border-gray-100 dark:border-gray-800">
-            <button type="button" onclick="document.getElementById('modalOverride').classList.remove('hidden')"
-              class="w-full py-2 rounded-xl border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-xs font-semibold transition flex items-center justify-center gap-1.5">
-              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-              <span>Manual Override Wewenang</span>
-            </button>
+            <form action="{{ route('ticket.link-inventory', $ticket) }}" method="POST" class="space-y-2">
+              @csrf
+              @method('PATCH')
+              <label for="link_inventory_item_id" class="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Sinkronisasi Aset Inventaris
+              </label>
+              <select name="inventory_item_id" id="link_inventory_item_id"
+                class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs">
+                <option value="">-- Tanpa Aset Tertaut --</option>
+                @foreach($inventoryItems ?? [] as $asset)
+                  <option value="{{ $asset->id }}" {{ $ticket->inventory_item_id === $asset->id ? 'selected' : '' }}>
+                    {{ $asset->asset_code }} — {{ $asset->name }} ({{ $asset->condition_label }})
+                  </option>
+                @endforeach
+              </select>
+              <button type="submit" class="w-full py-2 rounded-xl border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-xs font-semibold transition">
+                Simpan Tautan Aset
+              </button>
+            </form>
           </div>
         </div>
       @endif
@@ -365,8 +513,50 @@
 
 </div>
 
+<!-- Modal Reporter Self-Cancel (Owner Only while Open) -->
+@if(auth()->id() === $ticket->user_id && $ticket->status === 'open')
+<div id="modalSelfCancel" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-gray-900 w-full max-w-md rounded-3xl border border-gray-200 dark:border-gray-800 p-6 shadow-2xl space-y-4">
+    <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
+      <h3 class="font-bold text-base text-gray-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="x-circle" class="w-4 h-4 text-rose-600"></i>
+        <span>Batalkan Tiket Bantuan</span>
+      </h3>
+      <button type="button" onclick="document.getElementById('modalSelfCancel').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <form action="{{ route('ticket.cancel', $ticket) }}" method="POST" class="space-y-4 text-xs">
+      @csrf
+      @method('PATCH')
+
+      <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
+        Apakah kendala Anda sudah teratasi sendiri? Tiket yang dibatalkan bersifat final dan tidak akan ditindaklanjuti oleh teknisi.
+      </p>
+
+      <div>
+        <label class="block font-bold text-gray-700 dark:text-gray-300 mb-1">Alasan Pembatalan (Opsional)</label>
+        <textarea name="status_note" rows="3" placeholder="Contoh: Sudah berhasil login kembali setelah restart perangkat..."
+          class="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs"></textarea>
+      </div>
+
+      <div class="pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
+        <button type="button" onclick="document.getElementById('modalSelfCancel').classList.add('hidden')"
+          class="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 font-semibold hover:bg-gray-50">
+          Kembali
+        </button>
+        <button type="submit" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-sm">
+          Ya, Batalkan Tiket
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+@endif
+
 <!-- Modal Manual Override Scope (Staff Only) -->
-@if($isStaff)
+@if($isStaff && !$ticket->isFinalStatus())
 <div id="modalOverride" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
   <div class="bg-white dark:bg-gray-900 w-full max-w-md rounded-3xl border border-gray-200 dark:border-gray-800 p-6 shadow-2xl space-y-4">
     <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">

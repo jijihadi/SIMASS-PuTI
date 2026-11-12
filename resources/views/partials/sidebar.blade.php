@@ -77,6 +77,11 @@
             ['icon' => 'history', 'item' => 'History Tiket', 'route' => 'ticket.history'],
             ['icon' => 'bot', 'item' => 'Luna AI', 'route' => 'ticket.luna'],
         ],
+        'Inventaris' => [
+            ['icon' => 'package', 'item' => 'Daftar Inventaris', 'route' => 'inventory.index'],
+            ['icon' => 'arrow-right-left', 'item' => 'Mutasi Lokasi', 'route' => 'inventory.mutations.index'],
+            ['icon' => 'wrench', 'item' => 'Maintenance & Bulk', 'route' => 'inventory.maintenances.index'],
+        ],
         'Lainnya' => [
             [
                 'icon' => 'shield-check',

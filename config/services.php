@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'luna' => [
+        'api_key' => env('LUNA_API_KEY'),
+        'allowed_wa_number' => env('LUNA_ALLOWED_WA_NUMBER'),
+    ],
+
 ];

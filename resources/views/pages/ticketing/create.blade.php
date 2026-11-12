@@ -93,8 +93,8 @@
         </div>
       </div>
 
-      <!-- 3. Lokasi & Prioritas -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <!-- 3. Lokasi, Aset Inventaris & Prioritas -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <label for="location" class="block text-sm font-bold text-gray-900 dark:text-gray-200 mb-1.5">
             Lokasi Gedung / Ruangan
@@ -102,7 +102,23 @@
           <input type="text" name="location" id="location" value="{{ old('location') }}"
             placeholder="Contoh: Gedung A Lantai 2, R.204"
             class="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-telkom-500 transition">
-          <p class="text-xs text-gray-500 mt-1">Sangat dianjurkan untuk kendala Wi-Fi, kabel LAN, atau perangkat fisik kelas.</p>
+          <p class="text-xs text-gray-500 mt-1">Sangat dianjurkan untuk kendala perangkat fisik kelas/lab.</p>
+        </div>
+
+        <div>
+          <label for="inventory_item_id" class="block text-sm font-bold text-gray-900 dark:text-gray-200 mb-1.5">
+            Tautkan Aset Inventaris (Opsional)
+          </label>
+          <select name="inventory_item_id" id="inventory_item_id"
+            class="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-telkom-500 transition">
+            <option value="">-- Tidak Terkait Aset Tertentu --</option>
+            @foreach($inventoryItems ?? [] as $asset)
+              <option value="{{ $asset->id }}" {{ (string) old('inventory_item_id') === (string) $asset->id ? 'selected' : '' }}>
+                {{ $asset->asset_code }} — {{ $asset->name }} ({{ $asset->display_location }})
+              </option>
+            @endforeach
+          </select>
+          <p class="text-xs text-gray-500 mt-1">Otomatis menyinkronkan kondisi aset di Inventaris.</p>
         </div>
 
         <div>

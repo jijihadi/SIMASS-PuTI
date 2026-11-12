@@ -31,6 +31,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::delete('/locations/{location}', [MasterDataController::class, 'destroyLocation'])->name('locations.destroy');
     Route::post('/services', [MasterDataController::class, 'storeService'])->name('services.store');
     Route::delete('/services/{service}', [MasterDataController::class, 'destroyService'])->name('services.destroy');
+    Route::post('/inventory-categories', [MasterDataController::class, 'storeInventoryCategory'])->name('inventory-categories.store');
+    Route::delete('/inventory-categories/{category}', [MasterDataController::class, 'destroyInventoryCategory'])->name('inventory-categories.destroy');
 
     // Audit Logs
     Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');

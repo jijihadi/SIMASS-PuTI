@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\TicketStatus;
 use Database\Factories\TicketFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -42,6 +43,7 @@ class Ticket extends Model
     protected $fillable = [
         'ticket_number',
         'user_id',
+        'inventory_item_id',
         'assigned_to',
         'category',
         'service_item',
@@ -55,6 +57,12 @@ class Ticket extends Model
         'attachment',
         'central_ticket_ref',
         'override_notes',
+        'cancel_reason',
+        'transferred_unit',
+        'status_note',
+        'source_channel',
+        'reporter_phone',
+        'reporter_name',
         'sla_due_at',
         'sla_paused_at',
         'resolved_at',
@@ -76,6 +84,16 @@ class Ticket extends Model
         return $this->belongsTo(User::class, 'assigned_to');
     }
 
+    public function inventoryItem(): BelongsTo
+    {
+        return $this->belongsTo(InventoryItem::class, 'inventory_item_id');
+    }
+
+    public function maintenances(): HasMany
+    {
+        return $this->hasMany(InventoryMaintenance::class, 'ticket_id')->orderBy('created_at', 'desc');
+    }
+
     public function messages(): HasMany
     {
         return $this->hasMany(TicketMessage::class)->orderBy('created_at', 'asc');
@@ -86,33 +104,40 @@ class Ticket extends Model
         return $this->hasMany(TicketSlaLog::class)->orderBy('created_at', 'desc');
     }
 
+    public function statusEnum(): ?TicketStatus
+    {
+        return TicketStatus::tryFrom($this->status);
+    }
+
+    public function needsClarification(): bool
+    {
+        return $this->status === TicketStatus::Open->value && $this->scope === 'needs_clarification';
+    }
+
+    public function isFinalStatus(): bool
+    {
+        return $this->statusEnum()?->isFinal() ?? false;
+    }
+
+    /**
+     * @return list<TicketStatus>
+     */
+    public function allowedNextStatuses(): array
+    {
+        return $this->statusEnum()?->allowedTransitions() ?? [];
+    }
+
     /**
      * User-Friendly Status Label (Empathetic & Transparent)
      */
     public function getUserStatusLabelAttribute(): string
     {
-        return match ($this->status) {
-            'open' => 'Laporan Diterima',
-            'pending_user' => 'Menunggu Tanggapan Anda',
-            'in_progress' => 'Sedang Ditangani',
-            'waiting_central' => 'Koordinasi Sistem Terpusat',
-            'resolved' => 'Selesai Ditangani',
-            'closed' => 'Tiket Ditutup',
-            default => ucfirst($this->status),
-        };
+        return $this->statusEnum()?->label() ?? ucfirst($this->status);
     }
 
     public function getUserStatusColorAttribute(): string
     {
-        return match ($this->status) {
-            'open' => 'blue',
-            'pending_user' => 'amber',
-            'in_progress' => 'purple',
-            'waiting_central' => 'orange',
-            'resolved' => 'emerald',
-            'closed' => 'gray',
-            default => 'gray',
-        };
+        return $this->statusEnum()?->color() ?? 'gray';
     }
 
     public static function generateTicketNumber(): string
