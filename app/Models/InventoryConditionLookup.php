@@ -37,4 +37,9 @@ class InventoryConditionLookup extends Model
     {
         return $this->code;
     }
+
+    public function items()
+    {
+        return $this->hasMany(InventoryItem::class, 'condition', 'code');
+    }
 }

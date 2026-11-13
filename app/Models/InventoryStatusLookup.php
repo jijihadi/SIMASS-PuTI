@@ -37,4 +37,9 @@ class InventoryStatusLookup extends Model
     {
         return $this->code;
     }
+
+    public function items()
+    {
+        return $this->hasMany(InventoryItem::class, 'status', 'code');
+    }
 }

@@ -7,10 +7,9 @@
 <div class="max-w-5xl mx-auto space-y-6">
 
   <div>
-    <a href="{{ route('inventory.bulk.index') }}" class="inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-900 dark:hover:text-white transition">
-      <i data-lucide="arrow-left" class="w-4 h-4"></i>
-      <span>Kembali ke Daftar Bulk Maintenance</span>
-    </a>
+    <x-button variant="secondary" size="sm" icon="arrow-left" href="{{ route('inventory.bulk.index') }}">
+      Kembali ke Daftar Bulk Maintenance
+    </x-button>
   </div>
 
   <div class="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-6 sm:p-8 shadow-sm">
@@ -94,10 +93,10 @@
       </div>
 
       <div class="pt-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-3">
-        <a href="{{ route('inventory.bulk.index') }}" class="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 font-semibold">Batal</a>
-        <button type="submit" class="px-6 py-2.5 rounded-xl bg-telkom-600 hover:bg-telkom-700 text-white font-semibold shadow-sm">
+        <x-button variant="ghost" size="md" href="{{ route('inventory.bulk.index') }}">Batal</x-button>
+        <x-button type="submit" variant="primary" size="md">
           Mulai Batch Bulk Maintenance
-        </button>
+        </x-button>
       </div>
     </form>
   </div>

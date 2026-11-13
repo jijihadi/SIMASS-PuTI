@@ -7,10 +7,9 @@
 <div class="space-y-6">
 
   <div class="flex items-center justify-between">
-    <a href="{{ route('inventory.bulk.index') }}" class="inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-900 dark:hover:text-white transition">
-      <i data-lucide="arrow-left" class="w-4 h-4"></i>
-      <span>Kembali ke Daftar Bulk Maintenance</span>
-    </a>
+    <x-button variant="secondary" size="sm" icon="arrow-left" href="{{ route('inventory.bulk.index') }}">
+      Kembali ke Daftar Bulk Maintenance
+    </x-button>
     <span class="px-3 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
       Status Batch: {{ $batch->status_label }}
     </span>
@@ -93,9 +92,9 @@
             <span>Otomatis buat e-Ticket perbaikan untuk setiap unit yang ditandai <strong>Rusak / Bermasalah</strong></span>
           </label>
 
-          <button type="submit" class="px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition">
+          <x-button type="submit" variant="primary" size="md">
             Selesaikan & Sinkronkan Batch
-          </button>
+          </x-button>
         </div>
       @endif
     </form>

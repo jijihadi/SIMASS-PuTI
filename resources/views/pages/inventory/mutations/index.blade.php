@@ -49,10 +49,9 @@
       <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Filter barang per gedung atau lantai, pilih aset yang ingin direlokasi, dan sistem akan mencatat riwayat perubahannya secara otomatis.</p>
     </div>
 
-    <a href="{{ route('inventory.index') }}" class="px-4 py-2 rounded-2xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 transition inline-flex items-center gap-2 shrink-0">
-      <i data-lucide="arrow-left" class="w-4 h-4"></i>
-      <span>Kembali ke Katalog</span>
-    </a>
+    <x-button variant="secondary" size="sm" icon="arrow-left" href="{{ route('inventory.index') }}" class="shrink-0">
+      Kembali ke Katalog
+    </x-button>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -94,12 +93,12 @@
           </div>
 
           <div class="flex items-end gap-2">
-            <button type="submit" class="flex-1 py-2 px-3 rounded-xl bg-telkom-600 hover:bg-telkom-700 text-white font-semibold transition">
+            <x-button type="submit" variant="primary" size="sm" class="flex-1">
               Terapkan Filter
-            </button>
-            <a href="{{ route('inventory.mutations.index') }}" class="py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 font-semibold hover:bg-gray-50">
+            </x-button>
+            <x-button variant="ghost" size="sm" href="{{ route('inventory.mutations.index') }}">
               Reset
-            </a>
+            </x-button>
           </div>
         </form>
       </div>
@@ -260,11 +259,9 @@
             <p class="text-[11px] text-gray-400 mt-1">Dicatat secara permanen pada log riwayat audit aset.</p>
           </div>
 
-          <button type="submit" :disabled="selectedItems.length === 0"
-            class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold transition shadow-sm inline-flex items-center justify-center gap-2">
-            <i data-lucide="arrow-right-left" class="w-4 h-4"></i>
-            <span>Terapkan Mutasi Aset</span>
-          </button>
+          <x-button type="submit" variant="primary" size="md" icon="arrow-right-left" x-bind:disabled="selectedItems.length === 0" class="w-full">
+            Terapkan Mutasi Aset
+          </x-button>
         </form>
       </div>
 

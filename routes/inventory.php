@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\MasterDataController;
 use App\Http\Controllers\Inventory\BulkMaintenanceController;
 use App\Http\Controllers\Inventory\InventoryController;
 use App\Http\Controllers\Inventory\InventoryMaintenanceController;
@@ -23,6 +24,9 @@ Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/maintenances', [InventoryMaintenanceController::class, 'index'])->name('maintenances.index');
     Route::post('/maintenances', [InventoryMaintenanceController::class, 'store'])->name('maintenances.store');
     Route::patch('/maintenances/{maintenance}', [InventoryMaintenanceController::class, 'update'])->name('maintenances.update');
+
+    // Master Data & Kategori (Accessible from Inventory Module)
+    Route::get('/master-data', [MasterDataController::class, 'index'])->name('master-data');
 
     // Bulk Maintenance (actions & batch completion)
     Route::get('/bulk-maintenances', [BulkMaintenanceController::class, 'index'])->name('bulk.index');

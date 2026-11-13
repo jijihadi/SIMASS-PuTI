@@ -7,10 +7,9 @@
 <div x-data="{ assetType: '{{ $item->asset_type }}' }" class="space-y-6">
 
   <div class="flex items-center justify-between">
-    <a href="{{ route('inventory.index') }}" class="inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-900 dark:hover:text-white transition">
-      <i data-lucide="arrow-left" class="w-4 h-4"></i>
-      <span>Kembali ke Daftar Inventaris</span>
-    </a>
+    <x-button variant="secondary" size="sm" icon="arrow-left" href="{{ route('inventory.index') }}">
+      Kembali ke Daftar Inventaris
+    </x-button>
   </div>
 
   @if(session('success'))
@@ -284,18 +283,18 @@
             class="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
         </div>
 
-        <button type="submit" class="w-full py-2.5 rounded-xl bg-telkom-600 hover:bg-telkom-700 text-white font-semibold transition shadow-sm">
+        <x-button type="submit" variant="primary" size="md" class="w-full">
           Simpan Pembaruan Aset
-        </button>
+        </x-button>
       </form>
 
       <!-- Delete Action -->
       <form action="{{ route('inventory.destroy', $item) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus aset ini secara permanen?')">
         @csrf
         @method('DELETE')
-        <button type="submit" class="w-full py-2 rounded-xl border border-rose-200 dark:border-rose-900 text-rose-600 hover:bg-rose-50 text-xs font-semibold transition">
+        <x-button type="submit" variant="danger" size="sm" class="w-full">
           Hapus Aset Ini
-        </button>
+        </x-button>
       </form>
     </div>
 

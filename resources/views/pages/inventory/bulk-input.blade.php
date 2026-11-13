@@ -107,10 +107,9 @@
     </div>
 
     <div class="flex items-center gap-2 shrink-0">
-      <a href="{{ route('inventory.index') }}" class="px-4 py-2 rounded-2xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 transition inline-flex items-center gap-2">
-        <i data-lucide="arrow-left" class="w-4 h-4"></i>
-        <span>Kembali ke Katalog</span>
-      </a>
+      <x-button variant="secondary" size="sm" icon="arrow-left" href="{{ route('inventory.index') }}">
+        Kembali ke Katalog
+      </x-button>
     </div>
   </div>
 
@@ -121,34 +120,26 @@
     <!-- Action Toolbar above Table -->
     <div class="bg-white dark:bg-gray-900 p-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
       <div class="flex items-center gap-2">
-        <button type="button" @click="addEmptyRow()"
-          class="px-3.5 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-semibold transition inline-flex items-center gap-1.5 shadow-sm">
-          <i data-lucide="plus" class="w-4 h-4 text-emerald-600"></i>
-          <span>Tambah Baris Kosong</span>
-        </button>
+        <x-button type="button" variant="secondary" size="sm" icon="plus" @click="addEmptyRow()">
+          Tambah Baris Kosong
+        </x-button>
 
-        <button type="button" @click="copyRow(bulkRows.length - 1)"
-          class="px-3.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 border border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300 font-semibold transition inline-flex items-center gap-1.5 shadow-sm">
-          <i data-lucide="copy" class="w-4 h-4"></i>
-          <span>Duplikasi Baris Terakhir</span>
-        </button>
+        <x-button type="button" variant="table-blue" size="sm" icon="copy" @click="copyRow(bulkRows.length - 1)">
+          Duplikasi Baris Terakhir
+        </x-button>
 
-        <button type="button" @click="clearAll()"
-          class="px-3 py-1.5 rounded-xl text-gray-500 hover:text-rose-600 hover:bg-rose-50 transition inline-flex items-center gap-1">
-          <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
-          <span>Reset Baris</span>
-        </button>
+        <x-button type="button" variant="ghost" size="sm" icon="rotate-ccw" @click="clearAll()">
+          Reset Baris
+        </x-button>
       </div>
 
       <div class="flex items-center gap-3">
         <span class="text-xs text-gray-500 font-medium">
           Total: <strong class="text-blue-600 font-bold" x-text="bulkRows.length"></strong> baris aset
         </span>
-        <button type="submit"
-          class="px-5 py-2 rounded-xl bg-telkom-600 hover:bg-telkom-700 text-white font-semibold transition shadow-md inline-flex items-center gap-2">
-          <i data-lucide="check-circle" class="w-4 h-4"></i>
-          <span>Simpan Semua Aset (<span x-text="bulkRows.length"></span>)</span>
-        </button>
+        <x-button type="submit" variant="primary" size="md" icon="check-circle">
+          Simpan Semua Aset (<span x-text="bulkRows.length"></span>)
+        </x-button>
       </div>
     </div>
 
@@ -291,21 +282,17 @@
 
     <!-- Bottom Actions Bar -->
     <div class="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center justify-between">
-      <button type="button" @click="addEmptyRow()"
-        class="px-4 py-2 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 text-xs font-semibold hover:bg-gray-50 inline-flex items-center gap-1.5">
-        <i data-lucide="plus" class="w-4 h-4"></i>
-        <span>Tambah Baris Baru</span>
-      </button>
+      <x-button type="button" variant="secondary" size="sm" icon="plus" @click="addEmptyRow()">
+        Tambah Baris Baru
+      </x-button>
 
       <div class="flex items-center gap-3">
-        <a href="{{ route('inventory.index') }}" class="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600">
+        <x-button variant="ghost" size="sm" href="{{ route('inventory.index') }}">
           Batal
-        </a>
-        <button type="submit"
-          class="px-6 py-2.5 rounded-xl bg-telkom-600 hover:bg-telkom-700 text-white text-xs font-semibold shadow-md transition inline-flex items-center gap-2">
-          <i data-lucide="check" class="w-4 h-4"></i>
-          <span>Simpan Semua Aset (<span x-text="bulkRows.length"></span> Baris)</span>
-        </button>
+        </x-button>
+        <x-button type="submit" variant="primary" size="md" icon="check">
+          Simpan Semua Aset (<span x-text="bulkRows.length"></span> Baris)
+        </x-button>
       </div>
     </div>
   </form>

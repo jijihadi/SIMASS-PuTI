@@ -7,9 +7,12 @@ use App\Enums\TicketStatus;
 use App\Models\BulkMaintenanceBatch;
 use App\Models\CampusLocation;
 use App\Models\InventoryCategory;
+use App\Models\InventoryConditionLookup;
 use App\Models\InventoryHistory;
 use App\Models\InventoryItem;
 use App\Models\InventoryMaintenance;
+use App\Models\InventoryStatusLookup;
+use App\Models\InventoryType;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -341,6 +344,92 @@ test('admin can manage inventory categories in database and inventory uses them 
 
     expect(InventoryCategory::where('code', 'STV')->exists())->toBeTrue();
     expect(InventoryItem::getCategories())->toContain('Perangkat Smart TV & Display');
+
+    // Test Edit Category with cascade to items
+    $category = InventoryCategory::where('code', 'STV')->first();
+    $item = InventoryItem::factory()->create([
+        'category' => 'Perangkat Smart TV & Display',
+    ]);
+
+    $editRes = $this->actingAs($admin)->put("/admin/inventory-categories/{$category->id}", [
+        'name' => 'Smart Display & Interactive TV',
+        'code' => 'STV-NEW',
+        'description' => 'Updated description.',
+        'is_active' => true,
+    ]);
+    $editRes->assertRedirect('/admin/master-data?tab=inventory-categories');
+
+    $category->refresh();
+    expect($category->name)->toBe('Smart Display & Interactive TV');
+    expect($category->code)->toBe('STV-NEW');
+
+    // Verify cascade update to items
+    $item->refresh();
+    expect($item->category)->toBe('Smart Display & Interactive TV');
+});
+
+test('admin can manage inventory types, statuses, and conditions in master data', function () {
+    Role::findOrCreate('super-admin', 'web');
+    $admin = User::factory()->create(['type' => 'Staf', 'is_active' => true]);
+    $admin->assignRole('super-admin');
+
+    // 1. Types
+    $resType = $this->actingAs($admin)->post('/admin/inventory-types', [
+        'name' => 'Virtual Machine / VPS',
+        'code' => 'vm',
+        'description' => 'Mesin virtual cloud PuTI.',
+    ]);
+    $resType->assertRedirect('/admin/master-data?tab=inventory-types');
+    $vmType = InventoryType::where('code', 'vm')->first();
+    expect($vmType)->not->toBeNull();
+
+    $this->actingAs($admin)->put("/admin/inventory-types/{$vmType->id}", [
+        'name' => 'Cloud VM & Container',
+        'code' => 'vm',
+        'description' => 'Docker, K8s, dan VPS.',
+        'is_active' => true,
+    ])->assertRedirect('/admin/master-data?tab=inventory-types');
+    $vmType->refresh();
+    expect($vmType->name)->toBe('Cloud VM & Container');
+
+    // 2. Statuses
+    $resStatus = $this->actingAs($admin)->post('/admin/inventory-statuses', [
+        'name' => 'Dipinjamkan Sementara',
+        'code' => 'loaned',
+        'color' => 'blue',
+    ]);
+    $resStatus->assertRedirect('/admin/master-data?tab=inventory-statuses');
+    $status = InventoryStatusLookup::where('code', 'loaned')->first();
+    expect($status)->not->toBeNull();
+
+    $this->actingAs($admin)->put("/admin/inventory-statuses/{$status->id}", [
+        'name' => 'Dipinjamkan Unit Luar',
+        'code' => 'loaned',
+        'color' => 'purple',
+        'is_active' => true,
+    ])->assertRedirect('/admin/master-data?tab=inventory-statuses');
+    $status->refresh();
+    expect($status->name)->toBe('Dipinjamkan Unit Luar');
+    expect($status->color)->toBe('purple');
+
+    // 3. Conditions
+    $resCondition = $this->actingAs($admin)->post('/admin/inventory-conditions', [
+        'name' => 'Hilang / Tidak Ditemukan',
+        'code' => 'missing',
+        'color' => 'rose',
+    ]);
+    $resCondition->assertRedirect('/admin/master-data?tab=inventory-conditions');
+    $condition = InventoryConditionLookup::where('code', 'missing')->first();
+    expect($condition)->not->toBeNull();
+
+    $this->actingAs($admin)->put("/admin/inventory-conditions/{$condition->id}", [
+        'name' => 'Hilang / Investigasi',
+        'code' => 'missing',
+        'color' => 'rose',
+        'is_active' => true,
+    ])->assertRedirect('/admin/master-data?tab=inventory-conditions');
+    $condition->refresh();
+    expect($condition->name)->toBe('Hilang / Investigasi');
 });
 
 test('inventory index displays compact table with jenis below name, maintenance cycle, and reminder badges', function () {
@@ -380,4 +469,41 @@ test('inventory index displays compact table with jenis below name, maintenance 
     $res->assertSee('Digital / Lisensi');
     $res->assertSee('Siklus: Tahunan');
     $res->assertSee('Segera Diperbarui (H-10');
+});
+
+test('sidebar renders inventory master data and bulk input menu items and inventory master data route works', function () {
+    $staff = User::factory()->create(['type' => 'Staf', 'is_active' => true]);
+
+    // Check inventory index sidebar includes the new menu items
+    $res = $this->actingAs($staff)->get('/inventory');
+    $res->assertOk();
+    $res->assertSee('Bulk Input Aset');
+    $res->assertSee('Kategori &amp; Data Master', false);
+
+    // Check accessing inventory master data directly
+    $resMaster = $this->actingAs($staff)->get('/inventory/master-data');
+    $resMaster->assertOk();
+    $resMaster->assertSee('Kategori &amp; Data Master Aset', false);
+    $resMaster->assertSee('Kategori Inventaris');
+    $resMaster->assertSee('Kembali ke Inventaris');
+
+    // Test updating a category with referer from inventory/master-data redirects to inventory.master-data
+    $admin = User::factory()->create(['type' => 'Staf', 'is_active' => true]);
+    $adminRole = Role::firstOrCreate(['name' => 'super-admin']);
+    $admin->assignRole($adminRole);
+
+    $category = InventoryCategory::firstOrCreate(
+        ['code' => 'TEST-CAT'],
+        ['name' => 'Test Category Sidebar', 'description' => 'Perangkat test', 'is_active' => true]
+    );
+
+    $this->actingAs($admin)
+        ->from('/inventory/master-data?tab=inventory-categories')
+        ->put("/admin/inventory-categories/{$category->id}", [
+            'name' => 'Test Category Updated',
+            'code' => 'TEST-CAT-UPD',
+            'description' => 'Perangkat test updated',
+            'is_active' => true,
+        ])
+        ->assertRedirect('/inventory/master-data?tab=inventory-categories');
 });

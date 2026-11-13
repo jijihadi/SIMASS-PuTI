@@ -45,23 +45,17 @@
                 </p>
             </div>
             <div class="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-                <button type="button" @click="openExcelModal = true"
-                    class="px-4 py-2.5 rounded-2xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 text-xs font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-100 transition inline-flex items-center gap-2 shadow-sm">
-                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
-                    <span>Import Excel</span>
-                </button>
+                <x-button type="button" variant="secondary" size="md" icon="file-spreadsheet" @click="openExcelModal = true">
+                    Import Excel
+                </x-button>
 
-                <a href="{{ route('inventory.bulk-input') }}"
-                    class="px-4 py-2.5 rounded-2xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 transition inline-flex items-center gap-2 shadow-sm">
-                    <i data-lucide="table" class="w-4 h-4"></i>
-                    <span>Bulk Input</span>
-                </a>
+                <x-button variant="secondary" size="md" icon="table" href="{{ route('inventory.bulk-input') }}">
+                    Bulk Input
+                </x-button>
 
-                <button type="button" @click="openAddModal = true"
-                    class="px-4 py-2.5 rounded-2xl bg-telkom-600 hover:bg-telkom-700 text-white text-xs font-semibold shadow-sm transition inline-flex items-center gap-2">
-                    <i data-lucide="plus-circle" class="w-4 h-4"></i>
-                    <span>+ Tambah Aset</span>
-                </button>
+                <x-button type="button" variant="primary" size="md" icon="plus-circle" @click="openAddModal = true">
+                    + Tambah Aset
+                </x-button>
             </div>
         </div>
 
@@ -181,14 +175,12 @@
                 </div>
 
                 <div class="flex items-end gap-2">
-                    <button type="submit"
-                        class="flex-1 py-2 px-3 rounded-xl bg-telkom-600 hover:bg-telkom-700 text-white font-semibold transition">
+                    <x-button type="submit" variant="primary" size="sm" icon="search" class="flex-1">
                         Filter
-                    </button>
-                    <a href="{{ route('inventory.index') }}"
-                        class="py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800">
+                    </x-button>
+                    <x-button variant="ghost" size="sm" href="{{ route('inventory.index') }}">
                         Reset
-                    </a>
+                    </x-button>
                 </div>
             </form>
         </div>
@@ -378,11 +370,9 @@
 
                                     <!-- 6. Aksi -->
                                     <td class="px-4 py-4 text-center align-top whitespace-nowrap">
-                                        <a href="{{ route('inventory.show', $item) }}"
-                                            class="px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-purple-600 hover:text-white text-xs font-semibold text-gray-700 dark:text-gray-300 transition inline-flex items-center gap-1.5 shadow-xs">
-                                            <i data-lucide="eye" class="w-3.5 h-3.5"></i>
-                                            <span>Detail & Riwayat</span>
-                                        </a>
+                                        <x-button variant="table" icon="eye" href="{{ route('inventory.show', $item) }}">
+                                            Detail & Riwayat
+                                        </x-button>
                                     </td>
                                 </tr>
                             @endforeach
@@ -622,14 +612,12 @@
                     </div>
 
                     <div class="pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
-                        <button type="button" @click="openAddModal = false"
-                            class="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 font-semibold">
+                        <x-button type="button" variant="secondary" size="sm" @click="openAddModal = false">
                             Batal
-                        </button>
-                        <button type="submit"
-                            class="px-5 py-2 rounded-xl bg-telkom-600 hover:bg-telkom-700 text-white font-semibold shadow-sm">
+                        </x-button>
+                        <x-button type="submit" variant="primary" size="sm">
                             Simpan Aset
-                        </button>
+                        </x-button>
                     </div>
                 </form>
             </div>
@@ -682,13 +670,12 @@
                     </div>
 
                     <div class="pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
-                        <button type="button" @click="openExcelModal = false"
-                            class="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600">Batal</button>
-                        <button type="submit"
-                            class="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-sm inline-flex items-center gap-1.5">
-                            <i data-lucide="check" class="w-4 h-4"></i>
-                            <span>Mulai Impor File</span>
-                        </button>
+                        <x-button type="button" variant="secondary" size="sm" @click="openExcelModal = false">
+                            Batal
+                        </x-button>
+                        <x-button type="submit" variant="primary" size="sm" icon="check">
+                            Mulai Impor File
+                        </x-button>
                     </div>
                 </form>
             </div>

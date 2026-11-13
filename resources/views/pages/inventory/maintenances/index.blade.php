@@ -22,10 +22,9 @@
       </div>
 
       <div class="flex items-center gap-2">
-        <a href="{{ route('inventory.index') }}" class="px-4 py-2 rounded-2xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 transition inline-flex items-center gap-1.5">
-          <i data-lucide="arrow-left" class="w-4 h-4"></i>
-          <span>Ke Katalog Inventaris</span>
-        </a>
+        <x-button variant="secondary" size="sm" icon="arrow-left" href="{{ route('inventory.index') }}">
+          Ke Katalog Inventaris
+        </x-button>
       </div>
     </div>
 
@@ -131,9 +130,9 @@
           </label>
         </div>
 
-        <button type="submit" class="w-full py-2.5 rounded-xl bg-telkom-600 hover:bg-telkom-700 text-white font-semibold shadow-sm transition">
+        <x-button type="submit" variant="primary" size="md" class="w-full">
           Simpan & Sinkronkan
-        </button>
+        </x-button>
       </form>
     </div>
 
@@ -177,9 +176,9 @@
                   <input type="text" name="action_notes" placeholder="Catatan tindakan penyelesaian..." class="flex-1 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs">
                   <input type="hidden" name="auto_resolve_ticket" value="1">
                   <input type="hidden" name="spawn_ticket_on_damage" value="1">
-                  <button type="submit" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
+                  <x-button type="submit" variant="table-primary" size="sm">
                     Selesaikan
-                  </button>
+                  </x-button>
                 </form>
               @endif
             </div>
@@ -220,7 +219,11 @@
       @if($batches->isEmpty())
         <div class="p-12 text-center text-xs text-gray-500">
           <p class="font-semibold text-gray-700 dark:text-gray-300">Belum ada kegiatan Bulk Maintenance yang dibuat.</p>
-          <a href="{{ route('inventory.bulk.create') }}" class="text-purple-600 font-bold hover:underline mt-2 inline-block">+ Mulai Penugasan Bulk Sekarang</a>
+          <div class="mt-3">
+            <x-button variant="secondary" size="sm" icon="plus" href="{{ route('inventory.bulk.create') }}">
+              Mulai Penugasan Bulk Sekarang
+            </x-button>
+          </div>
         </div>
       @else
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -243,9 +246,9 @@
                 <span>Petugas: {{ $batch->performer?->name ?? '-' }}</span>
               </div>
 
-              <a href="{{ route('inventory.bulk.show', $batch) }}" class="w-full py-2 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:bg-purple-600 hover:text-white font-semibold transition text-center block">
+              <x-button variant="table" size="sm" href="{{ route('inventory.bulk.show', $batch) }}" class="w-full">
                 Buka Lembar Pengecekan & Checklist
-              </a>
+              </x-button>
             </div>
           @endforeach
         </div>
