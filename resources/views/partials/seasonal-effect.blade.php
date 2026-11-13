@@ -1,32 +1,180 @@
 @php($seasonalEffect = \App\Models\Setting::seasonalEffect())
 @if ($seasonalEffect)
-  <div id="seasonal-fx" data-effect="{{ $seasonalEffect }}" aria-hidden="true"></div>
-  <style>
-    #seasonal-fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 30; }
-    #seasonal-fx span { position: absolute; top: -10vh; line-height: 1; animation: sfx-fall linear infinite; will-change: transform; }
-    #seasonal-fx[data-effect="snow"] span { color: #93c5fd; }
-    #seasonal-fx[data-effect="rain"] span { width: 1.5px; height: 20px; background: rgba(59, 130, 246, .8); }
-    @keyframes sfx-fall { to { transform: translate(var(--dx), 115vh) rotate(var(--rot)); } }
-    @media (prefers-reduced-motion: reduce) { #seasonal-fx { display: none; } }
-  </style>
+  {{-- z-45: di atas sidebar (z-40), di bawah modal (z-50) --}}
+  <canvas id="seasonal-fx" data-effect="{{ $seasonalEffect }}" aria-hidden="true"
+    style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:45"></canvas>
   <script>
     (() => {
-      const box = document.getElementById('seasonal-fx');
-      const fx = {
-        snow:   { n: 45, chars: ['❄'],       min: 7,  max: 14,  dx: 60,  rot: 180 },
-        leaves: { n: 18, chars: ['🍂', '🍁'], min: 9,  max: 16,  dx: 160, rot: 720 },
-        rain:   { n: 60, chars: [''],        min: .7, max: 1.2, dx: 0,   rot: 0 },
-      }[box.dataset.effect];
-      const r = (a, b) => a + Math.random() * (b - a);
-      for (let i = 0; i < fx.n; i++) {
-        const s = document.createElement('span');
-        const dur = r(fx.min, fx.max);
-        s.textContent = fx.chars[i % fx.chars.length];
-        s.style.cssText = `left:${r(0, 100)}vw;font-size:${r(10, 22)}px;opacity:${r(.35, .85)};`
-          + `animation-duration:${dur}s;animation-delay:${-r(0, dur)}s;`
-          + `--dx:${r(-fx.dx, fx.dx)}px;--rot:${r(-fx.rot, fx.rot)}deg`;
-        box.append(s);
-      }
+      const cv = document.getElementById('seasonal-fx');
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return cv.remove();
+      const ctx = cv.getContext('2d');
+      const rnd = (a, b) => a + Math.random() * (b - a);
+      const isDark = () => document.documentElement.classList.contains('dark');
+      let w = 0, h = 0, t = 0;
+
+      const sprite = (sw, sh, paint) => {
+        const c = document.createElement('canvas');
+        c.width = sw;
+        c.height = sh;
+        paint(c.getContext('2d'));
+        return c;
+      };
+      // Titik bulat lembut (bokeh) untuk salju.
+      const glow = (rgb) => sprite(32, 32, (g) => {
+        const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+        gr.addColorStop(0, `rgba(${rgb},1)`);
+        gr.addColorStop(0.4, `rgba(${rgb},.7)`);
+        gr.addColorStop(1, `rgba(${rgb},0)`);
+        g.fillStyle = gr;
+        g.fillRect(0, 0, 32, 32);
+      });
+      // Garis hujan dengan ekor memudar.
+      const streak = (rgb) => sprite(4, 64, (g) => {
+        const gr = g.createLinearGradient(0, 0, 0, 64);
+        gr.addColorStop(0, `rgba(${rgb},0)`);
+        gr.addColorStop(1, `rgba(${rgb},1)`);
+        g.fillStyle = gr;
+        g.fillRect(0, 0, 4, 64);
+      });
+
+      const SLANT = 0.2; // kemiringan hujan (tertiup angin ke kiri)
+      const LEAF = ['#f59e0b', '#ea580c', '#c2410c', '#b45309', '#dc2626', '#ca8a04'];
+
+      // p.z = kedalaman 0.2 (jauh) .. 1 (dekat): ukuran, kecepatan, opacity ikut z → parallax.
+      // base = jumlah partikel di layar 1440x900.
+      const FX = {
+        snow: {
+          base: 110,
+          img: { light: glow('96,165,250'), dark: glow('255,255,255') },
+          init(p) {
+            p.x = rnd(-20, w + 20);
+            p.r = 1 + p.z * 2.6;
+            p.vy = 0.3 + p.z * 1.1;
+            p.amp = 0.2 + p.z * 0.5;
+            p.ph = rnd(0, 7);
+            p.f = rnd(0.5, 1.3);
+            p.a = 0.3 + p.z * 0.6;
+          },
+          step(p, dt, wind) {
+            p.x += (Math.sin(t * p.f + p.ph) * p.amp + wind * p.z) * dt;
+            p.y += p.vy * dt;
+          },
+          draw(p, dark) {
+            const s = p.r * 4;
+            ctx.globalAlpha = p.a;
+            ctx.drawImage(dark ? this.img.dark : this.img.light, p.x - s / 2, p.y - s / 2, s, s);
+          },
+        },
+        leaves: {
+          base: 30,
+          init(p) {
+            p.x = rnd(-20, w + 20);
+            p.s = 7 + p.z * 8;
+            p.vy = 0.45 + p.z * 0.8;
+            p.amp = 0.6 + p.z * 1.1;
+            p.ph = rnd(0, 7);
+            p.f = rnd(0.4, 0.9);
+            p.rot = rnd(0, 7);
+            p.vr = rnd(-0.03, 0.03);
+            p.flip = rnd(0, 7);
+            p.vf = rnd(0.012, 0.03);
+            p.c = LEAF[Math.floor(Math.random() * LEAF.length)];
+            p.a = 0.6 + p.z * 0.35;
+          },
+          step(p, dt, wind) {
+            p.x += (Math.sin(t * p.f + p.ph) * p.amp + wind * p.z * 2) * dt;
+            p.y += p.vy * dt;
+            p.rot += p.vr * dt;
+            p.flip += p.vf * dt;
+          },
+          draw(p) {
+            const k = Math.cos(p.flip); // daun berputar 3D: lebar menyempit saat membalik
+            ctx.globalAlpha = p.a * (0.6 + 0.4 * Math.abs(k));
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rot);
+            ctx.scale(k, 1);
+            ctx.fillStyle = p.c;
+            ctx.beginPath();
+            ctx.moveTo(0, -p.s);
+            ctx.quadraticCurveTo(p.s * 1.25, 0, 0, p.s);
+            ctx.quadraticCurveTo(-p.s * 1.25, 0, 0, -p.s);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(69,26,3,.35)'; // tulang daun + tangkai
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(0, -p.s * 0.75);
+            ctx.lineTo(0, p.s * 1.3);
+            ctx.stroke();
+            ctx.restore();
+          },
+        },
+        rain: {
+          base: 150,
+          img: { light: streak('59,130,246'), dark: streak('186,230,253') },
+          init(p) {
+            p.x = rnd(0, w + h * SLANT);
+            p.vy = 10 + p.z * 10;
+            p.len = 10 + p.z * 16;
+            p.lw = 0.8 + p.z * 1.2;
+            p.a = 0.15 + p.z * 0.35;
+          },
+          step(p, dt) {
+            p.x -= p.vy * SLANT * dt;
+            p.y += p.vy * dt;
+          },
+          draw(p, dark) {
+            ctx.globalAlpha = p.a;
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(Math.atan(SLANT));
+            ctx.drawImage(dark ? this.img.dark : this.img.light, -p.lw / 2, -p.len, p.lw, p.len);
+            ctx.restore();
+          },
+        },
+      };
+
+      const fx = FX[cv.dataset.effect];
+      if (!fx) return cv.remove();
+      const parts = [];
+      const spawn = (p, anywhere) => {
+        p.z = rnd(0.2, 1);
+        fx.init(p);
+        p.y = anywhere ? rnd(-20, h) : rnd(-60, -10);
+        return p;
+      };
+
+      const resize = () => {
+        const dpr = Math.min(devicePixelRatio || 1, 2);
+        w = innerWidth;
+        h = innerHeight;
+        cv.width = w * dpr;
+        cv.height = h * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // Jumlah partikel ikut luas layar; layar HP tetap kebagian minimal 35%.
+        const n = Math.round(fx.base * Math.min(1.5, Math.max(0.35, (w * h) / (1440 * 900))));
+        parts.length = Math.min(parts.length, n);
+        while (parts.length < n) parts.push(spawn({}, true));
+      };
+      addEventListener('resize', resize);
+      resize();
+
+      let last = performance.now();
+      const frame = (now) => {
+        const dt = Math.min((now - last) / 16.67, 3); // dinormalisasi ke 60fps; cegah lompatan setelah tab ditinggal
+        last = now;
+        t = now / 1000;
+        const wind = Math.sin(t * 0.3) * 0.5; // hembusan angin pelan bolak-balik
+        const dark = isDark();
+        ctx.clearRect(0, 0, w, h);
+        for (const p of parts) {
+          fx.step(p, dt, wind);
+          if (p.y > h + 40) spawn(p);
+          fx.draw(p, dark);
+        }
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
     })();
   </script>
 @endif
