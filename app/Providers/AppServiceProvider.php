@@ -23,6 +23,12 @@ class AppServiceProvider extends ServiceProvider
         // Di balik Cloudflare Tunnel request sampai sebagai HTTP; paksa URL https agar tidak mixed content
         if (str_starts_with((string) config('app.url'), 'https://')) {
             URL::forceScheme('https');
+
+            // Proxy dev (GitHub Codespaces) meneruskan Host sebagai localhost:8000 → CSS/link
+            // mengarah ke localhost. Lokal saja: kunci host ke APP_URL. Produksi tetap pakai Host request.
+            if ($this->app->isLocal()) {
+                URL::forceRootUrl(config('app.url'));
+            }
         }
     }
 }
