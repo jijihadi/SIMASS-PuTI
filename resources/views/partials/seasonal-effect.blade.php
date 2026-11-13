@@ -1,4 +1,5 @@
-@php($seasonalEffect = \App\Models\Setting::seasonalEffect())
+{{-- Check-in presensi menjalankan kamera + pengenalan wajah di HP: jangan dibebani animasi. --}}
+@php($seasonalEffect = request()->routeIs('presence.index') ? null : \App\Models\Setting::seasonalEffect())
 @if ($seasonalEffect)
   {{-- z-45: di atas sidebar (z-40), di bawah modal (z-50) --}}
   <canvas id="seasonal-fx" data-effect="{{ $seasonalEffect }}" aria-hidden="true"
@@ -182,8 +183,11 @@
       restore();
       resize();
 
-      let last = performance.now();
+      let last = performance.now() - 16.67;
       const frame = (now) => {
+        requestAnimationFrame(frame);
+        // Layar 120/144 Hz memanggil frame 2x lebih sering; lewati yang terlalu rapat (hemat CPU & baterai).
+        if (now - last < 10) return;
         const dt = Math.min((now - last) / 16.67, 3); // dinormalisasi ke 60fps; cegah lompatan setelah tab ditinggal
         last = now;
         t = (performance.timeOrigin + now) / 1000; // jam dinding: ayunan & angin menyambung antarhalaman
@@ -195,7 +199,6 @@
           if (p.y > h + 40) spawn(p);
           fx.draw(p, dark);
         }
-        requestAnimationFrame(frame);
       };
       frame(performance.now()); // gambar langsung agar partikel sudah ada saat halaman pertama tampil
     })();

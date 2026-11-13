@@ -4,6 +4,8 @@ use App\Models\Setting;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Route;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -46,6 +48,21 @@ test('admin can change the seasonal effect', function () {
     $this->actingAs($admin)
         ->post(route('settings.seasonal'), ['seasonal_effect' => 'fireworks'])
         ->assertSessionHasErrors('seasonal_effect');
+});
+
+test('effect renders on normal pages but not on the camera check-in page', function () {
+    Setting::create(['key' => 'seasonal_effect', 'value' => 'snow']);
+
+    $render = function (string $routeName) {
+        $request = Request::create('/');
+        $request->setRouteResolver(fn () => (new Route('GET', '/', []))->name($routeName));
+        $this->app->instance('request', $request);
+
+        return view('partials.seasonal-effect')->render();
+    };
+
+    expect($render('settings'))->toContain('id="seasonal-fx"')
+        ->and($render('presence.index'))->not->toContain('seasonal-fx');
 });
 
 test('non-admin cannot change the seasonal effect', function () {
