@@ -38,6 +38,7 @@
   @include('partials.mobile-navbar')
 
   @include('helpers.darkmode')
+  @include('partials.seasonal-effect')
 
   <x-confirm-delete />
   <x-toast />

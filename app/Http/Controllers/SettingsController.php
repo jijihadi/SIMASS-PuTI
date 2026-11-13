@@ -32,4 +32,15 @@ class SettingsController extends Controller
 
         return back()->with('status', 'Pengaturan lokasi berhasil disimpan.');
     }
+
+    public function updateSeasonal(Request $request)
+    {
+        $data = $request->validate([
+            'seasonal_effect' => 'required|in:auto,off,'.implode(',', Setting::SEASONAL_EFFECTS),
+        ]);
+
+        Setting::updateOrCreate(['key' => 'seasonal_effect'], ['value' => $data['seasonal_effect']]);
+
+        return back()->with('status', 'Efek musiman berhasil disimpan.');
+    }
 }

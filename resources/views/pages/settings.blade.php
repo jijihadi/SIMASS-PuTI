@@ -75,5 +75,48 @@
       </div>
     </form>
   </div>
+
+  @php
+    $seasonalMode = old('seasonal_effect', $settings['seasonal_effect'] ?? 'auto');
+    $seasonalOptions = [
+      'auto' => ['Otomatis per bulan', 'Des: salju · Sep–Okt: daun gugur · Nov, Jan–Mar: hujan · lainnya: mati'],
+      'snow' => ['Salju ❄️', 'Paksa salju, abaikan bulan'],
+      'leaves' => ['Daun gugur 🍂', 'Paksa daun gugur, abaikan bulan'],
+      'rain' => ['Hujan 🌧️', 'Paksa hujan, abaikan bulan'],
+      'off' => ['Mati', 'Tanpa efek sama sekali'],
+    ];
+    $seasonalNow = \App\Models\Setting::seasonalEffect();
+  @endphp
+  <div class="mt-6 bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 md:p-8">
+    <form action="{{ route('settings.seasonal') }}" method="POST" class="max-w-2xl space-y-6">
+      @csrf
+      <div>
+        <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100 border-b border-gray-100 dark:border-gray-800 pb-3 mb-4">Efek Musiman</h2>
+        <p class="text-sm text-gray-500 mb-6">
+          Animasi latar di semua halaman setelah login. Saat ini aktif:
+          <span class="font-semibold text-gray-700 dark:text-gray-300">{{ $seasonalNow ? $seasonalOptions[$seasonalNow][0] : 'Mati' }}</span>.
+        </p>
+
+        <div class="space-y-3">
+          @foreach ($seasonalOptions as $value => [$label, $desc])
+            <label class="flex items-start gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+              <input type="radio" name="seasonal_effect" value="{{ $value }}" @checked($seasonalMode === $value) class="mt-1 accent-telkom-600">
+              <span>
+                <span class="block text-sm font-semibold text-gray-700 dark:text-gray-300">{{ $label }}</span>
+                <span class="block text-xs text-gray-500">{{ $desc }}</span>
+              </span>
+            </label>
+          @endforeach
+        </div>
+        @error('seasonal_effect') <p class="text-xs text-red-500 mt-1">{{ $message }}</p> @enderror
+      </div>
+
+      <div class="pt-4 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+        <button type="submit" class="px-6 py-2.5 gradient-telkom text-white font-bold rounded-xl shadow-lg shadow-telkom-600/30 hover:opacity-90 transition active:scale-95">
+          Simpan Efek
+        </button>
+      </div>
+    </form>
+  </div>
 </div>
 @endsection
