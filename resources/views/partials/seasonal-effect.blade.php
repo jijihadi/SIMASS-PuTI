@@ -157,13 +157,36 @@
         while (parts.length < n) parts.push(spawn({}, true));
       };
       addEventListener('resize', resize);
+
+      // Pindah halaman di SIMASS = muat ulang penuh. Simpan partikel saat halaman ditinggal,
+      // lanjutkan di halaman berikutnya supaya efek tidak terlihat mulai ulang.
+      const KEY = 'seasonal-fx';
+      const restore = () => {
+        try {
+          const saved = JSON.parse(sessionStorage.getItem(KEY));
+          if (saved?.effect === cv.dataset.effect) parts.splice(0, parts.length, ...saved.parts);
+        } catch {}
+      };
+      addEventListener('pagehide', () => {
+        try {
+          sessionStorage.setItem(KEY, JSON.stringify({ effect: cv.dataset.effect, parts }));
+        } catch {}
+      });
+      // Kembali lewat tombol Back (bfcache): pakai posisi dari halaman yang barusan ditinggal.
+      addEventListener('pageshow', (e) => {
+        if (e.persisted) {
+          restore();
+          resize();
+        }
+      });
+      restore();
       resize();
 
       let last = performance.now();
       const frame = (now) => {
         const dt = Math.min((now - last) / 16.67, 3); // dinormalisasi ke 60fps; cegah lompatan setelah tab ditinggal
         last = now;
-        t = now / 1000;
+        t = (performance.timeOrigin + now) / 1000; // jam dinding: ayunan & angin menyambung antarhalaman
         const wind = Math.sin(t * 0.3) * 0.5; // hembusan angin pelan bolak-balik
         const dark = isDark();
         ctx.clearRect(0, 0, w, h);
@@ -174,7 +197,7 @@
         }
         requestAnimationFrame(frame);
       };
-      requestAnimationFrame(frame);
+      frame(performance.now()); // gambar langsung agar partikel sudah ada saat halaman pertama tampil
     })();
   </script>
 @endif
