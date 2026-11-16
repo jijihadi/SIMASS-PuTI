@@ -60,6 +60,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:manage-roles')->group(function () {
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
         Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
+        Route::post('/settings/seasonal', [SettingsController::class, 'updateSeasonal'])->name('settings.seasonal');
     });
     // Role & Permission (super-admin only)
     Route::get('/role-permission', [RolePermissionController::class, 'index'])
