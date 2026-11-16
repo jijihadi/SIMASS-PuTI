@@ -72,6 +72,12 @@ class RolePermissionController extends Controller
             'manage-roles' => ['app' => 'Admin Console', 'label' => 'Kelola Role & Peran', 'desc' => 'Mengubah peran dan izin akses pengguna sistem'],
             'view-settings' => ['app' => 'Admin Console', 'label' => 'Lihat Pengaturan Sistem', 'desc' => 'Melihat konfigurasi dan parameter sistem'],
             'manage-settings' => ['app' => 'Admin Console', 'label' => 'Kelola Pengaturan Sistem', 'desc' => 'Mengubah parameter konfigurasi dan sistem'],
+
+            // SIMASS Inventaris
+            'view-inventory' => ['app' => 'SIMASS Inventaris', 'label' => 'Lihat Data Inventaris', 'desc' => 'Melihat daftar aset, detail aset, mutasi lokasi, dan riwayat'],
+            'create-inventory' => ['app' => 'SIMASS Inventaris', 'label' => 'Tambah & Import Aset', 'desc' => 'Menambahkan data aset baru dan import massal Excel'],
+            'manage-inventory' => ['app' => 'SIMASS Inventaris', 'label' => 'Kelola Aset & Mutasi', 'desc' => 'Mengubah, menghapus, mutasi lokasi, serta kelola kategori & data master'],
+            'manage-maintenance' => ['app' => 'SIMASS Inventaris', 'label' => 'Kelola Maintenance', 'desc' => 'Menjadwalkan, mencatat, dan menyelesaikan pemeliharaan rutin maupun bulk'],
         ];
 
         $allPermissions = Permission::orderBy('name')->get();
@@ -156,9 +162,9 @@ class RolePermissionController extends Controller
                 'name' => 'SIMASS Inventaris',
                 'slug' => 'simass-inventaris',
                 'icon' => 'package',
-                'status' => 'coming_soon',
-                'description' => 'Pencatatan aset perangkat keras, peminjaman barang, dan log audit lab.',
-                'permissions' => [],
+                'status' => 'active',
+                'description' => 'Pencatatan aset perangkat keras & lisensi digital, mutasi lokasi, bulk input, dan maintenance terpadu.',
+                'permissions' => $permissionsByApp['SIMASS Inventaris'] ?? [],
             ],
         ];
 

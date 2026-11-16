@@ -12,6 +12,7 @@ beforeEach(function () {
     Role::firstOrCreate(['name' => 'student-staff', 'guard_name' => 'web']);
 
     Permission::firstOrCreate(['name' => 'manage-roles', 'guard_name' => 'web']);
+    Permission::firstOrCreate(['name' => 'manage-users', 'guard_name' => 'web']);
     Permission::firstOrCreate(['name' => 'view-presence', 'guard_name' => 'web']);
     Permission::firstOrCreate(['name' => 'access-admin', 'guard_name' => 'web']);
 });
@@ -81,4 +82,57 @@ test('admin can update user main role and direct permissions', function () {
     $targetUser->refresh();
     expect($targetUser->hasRole('student-staff'))->toBeTrue()
         ->and($targetUser->hasPermissionTo('view-presence'))->toBeTrue();
+});
+
+test('admin can view and assign inventaris permissions to user', function () {
+    $admin = User::factory()->create(['is_active' => true]);
+    $admin->assignRole('super-admin');
+    $admin->givePermissionTo('manage-roles');
+
+    $targetUser = User::factory()->create(['name' => 'Fajar Pratama', 'is_active' => true]);
+    $targetUser->assignRole('staff');
+
+    // 1. Verify edit page displays active SIMASS Inventaris category with permissions
+    $editRes = $this->actingAs($admin)->get(route('role-permission.edit', $targetUser));
+    $editRes->assertOk();
+    $editRes->assertSee('SIMASS Inventaris');
+    $editRes->assertSee('Lihat Data Inventaris');
+    $editRes->assertSee('Tambah &amp; Import Aset', false);
+    $editRes->assertSee('Kelola Aset &amp; Mutasi', false);
+    $editRes->assertSee('Kelola Maintenance');
+
+    // 2. Assign inventory permissions
+    $updateRes = $this->actingAs($admin)->post(route('role-permission.update', $targetUser), [
+        'user_role' => 'staff',
+        'user_permissions' => ['view-inventory', 'create-inventory', 'manage-maintenance'],
+    ]);
+    $updateRes->assertRedirect(route('role-permission'));
+
+    $targetUser->refresh();
+    expect($targetUser->hasDirectPermission('view-inventory'))->toBeTrue();
+    expect($targetUser->hasDirectPermission('create-inventory'))->toBeTrue();
+    expect($targetUser->hasDirectPermission('manage-maintenance'))->toBeTrue();
+    expect($targetUser->hasDirectPermission('manage-inventory'))->toBeFalse();
+});
+
+test('admin can toggle user status using radio toggle status value', function () {
+    $admin = User::factory()->create(['is_active' => true]);
+    $admin->assignRole('super-admin');
+    $admin->givePermissionTo('manage-users');
+
+    $targetUser = User::factory()->create(['name' => 'Doni Saputra', 'is_active' => true]);
+
+    // Deactivate using status=inactive
+    $resDeactivate = $this->actingAs($admin)->patch("/admin/users/{$targetUser->id}/toggle-status", [
+        'status' => 'inactive',
+    ]);
+    $resDeactivate->assertRedirect();
+    expect($targetUser->fresh()->is_active)->toBeFalse();
+
+    // Activate using status=active
+    $resActivate = $this->actingAs($admin)->patch("/admin/users/{$targetUser->id}/toggle-status", [
+        'status' => 'active',
+    ]);
+    $resActivate->assertRedirect();
+    expect($targetUser->fresh()->is_active)->toBeTrue();
 });

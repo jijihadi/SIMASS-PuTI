@@ -135,11 +135,11 @@
             ['icon' => 'bot', 'item' => 'Luna AI', 'route' => 'ticket.luna', 'active' => ['ticket.luna']],
         ],
         'Inventaris' => [
-            ['icon' => 'package', 'item' => 'Daftar Inventaris', 'route' => 'inventory.index', 'active' => ['inventory.index', 'inventory.show']],
-            ['icon' => 'table', 'item' => 'Bulk Input Aset', 'route' => 'inventory.bulk-input', 'active' => ['inventory.bulk-input', 'inventory.template']],
-            ['icon' => 'arrow-right-left', 'item' => 'Mutasi Lokasi', 'route' => 'inventory.mutations.index', 'active' => ['inventory.mutations.*']],
-            ['icon' => 'wrench', 'item' => 'Maintenance & Bulk', 'route' => 'inventory.maintenances.index', 'active' => ['inventory.maintenances.*', 'inventory.bulk.*']],
-            ['icon' => 'database', 'item' => 'Kategori & Data Master', 'route' => 'inventory.master-data', 'active' => ['inventory.master-data']],
+            ['icon' => 'package', 'item' => 'Daftar Inventaris', 'route' => 'inventory.index', 'active' => ['inventory.index', 'inventory.show'], 'permission' => 'view-inventory'],
+            ['icon' => 'table', 'item' => 'Bulk Input Aset', 'route' => 'inventory.bulk-input', 'active' => ['inventory.bulk-input', 'inventory.template'], 'permission' => 'create-inventory'],
+            ['icon' => 'arrow-right-left', 'item' => 'Mutasi Lokasi', 'route' => 'inventory.mutations.index', 'active' => ['inventory.mutations.*'], 'permission' => 'manage-inventory'],
+            ['icon' => 'wrench', 'item' => 'Maintenance & Bulk', 'route' => 'inventory.maintenances.index', 'active' => ['inventory.maintenances.*', 'inventory.bulk.*'], 'permission' => 'manage-maintenance'],
+            ['icon' => 'database', 'item' => 'Kategori & Data Master', 'route' => 'inventory.master-data', 'active' => ['inventory.master-data'], 'permission' => 'manage-inventory'],
         ],
         'Lainnya' => [
             [

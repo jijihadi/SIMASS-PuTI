@@ -145,11 +145,22 @@ class UserController extends Controller
     {
         $policy = new UserPolicy;
 
-        if ($user->is_active && ! $policy->deactivate(Auth::user(), $user)) {
-            return back()->with('error', 'Tindakan deaktivasi ditolak oleh guardrail keamanan.');
+        if ($request->filled('status')) {
+            $targetActive = $request->input('status') === 'active';
+            if ($user->is_active === $targetActive) {
+                return back();
+            }
+            if ($user->is_active && ! $targetActive && ! $policy->deactivate(Auth::user(), $user)) {
+                return back()->with('error', 'Tindakan deaktivasi ditolak oleh guardrail keamanan.');
+            }
+            $user->is_active = $targetActive;
+        } else {
+            if ($user->is_active && ! $policy->deactivate(Auth::user(), $user)) {
+                return back()->with('error', 'Tindakan deaktivasi ditolak oleh guardrail keamanan.');
+            }
+            $user->is_active = ! $user->is_active;
         }
 
-        $user->is_active = ! $user->is_active;
         $user->save();
 
         AuditLog::create([

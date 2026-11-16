@@ -71,7 +71,7 @@ test('uses the configured checkout time', function () {
 
 test('presence list and PDF show the same rounded duration while database stays exact', function () {
     $user = User::factory()->create();
-    Role::create(['name' => 'student-staff']);
+    Role::firstOrCreate(['name' => 'student-staff', 'guard_name' => 'web']);
     $user->assignRole('student-staff');
     $presence = Presence::create([
         'user_id' => $user->id,

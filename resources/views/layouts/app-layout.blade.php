@@ -11,6 +11,14 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
     [x-cloak] { display: none !important; }
+    /* Prevent Select2 from ever rendering inside SweetAlert2 modals or toast notifications */
+    .swal2-container .select2,
+    .swal2-popup .select2,
+    .swal2-container select,
+    .swal2-popup select,
+    .swal2-select {
+      display: none !important;
+    }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
@@ -52,10 +60,15 @@
         return;
       }
 
+      // Never initialize inside SweetAlert2
+      if (root && ($(root).hasClass('swal2-container') || $(root).hasClass('swal2-popup') || $(root).closest('.swal2-container, .swal2-popup').length > 0)) {
+        return;
+      }
+
       const $context = root ? $(root) : $(document);
-      $context.find('select:not([data-no-select2]):not(.no-select2)').each(function() {
+      $context.find('select:not([data-no-select2]):not(.no-select2):not(.swal2-select)').each(function() {
         const $el = $(this);
-        if ($el.attr('id') === 'cameraSelect' || $el.hasClass('select2-offscreen')) {
+        if ($el.attr('id') === 'cameraSelect' || $el.hasClass('select2-offscreen') || $el.closest('.swal2-container, .swal2-popup, .swal2-modal, [class*="swal2"]').length > 0) {
           return;
         }
 
@@ -93,15 +106,26 @@
         for (const mutation of mutations) {
           if (mutation.type === 'attributes' && (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
             const target = mutation.target;
+            if (target && target.closest && target.closest('.swal2-container, .swal2-popup, .swal2-modal, [class*="swal2"]')) {
+              continue;
+            }
             if (target && target.style && target.style.display !== 'none' && target.querySelectorAll) {
-              if (target.querySelectorAll('select:not([data-no-select2])').length > 0) {
+              if (target.querySelectorAll('select:not([data-no-select2]):not(.swal2-select)').length > 0) {
                 setTimeout(() => window.initSelect2Auto(target), 30);
               }
             }
           } else if (mutation.type === 'childList') {
             for (const node of mutation.addedNodes) {
-              if (node.nodeType === 1 && node.querySelectorAll && node.querySelectorAll('select:not([data-no-select2])').length > 0) {
-                setTimeout(() => window.initSelect2Auto(node), 30);
+              if (node.nodeType === 1) {
+                if (node.closest && node.closest('.swal2-container, .swal2-popup, .swal2-modal, [class*="swal2"]')) {
+                  continue;
+                }
+                if (node.classList && (node.classList.contains('swal2-container') || node.classList.contains('swal2-popup') || node.classList.contains('swal2-modal'))) {
+                  continue;
+                }
+                if (node.querySelectorAll && node.querySelectorAll('select:not([data-no-select2]):not(.swal2-select)').length > 0) {
+                  setTimeout(() => window.initSelect2Auto(node), 30);
+                }
               }
             }
           }

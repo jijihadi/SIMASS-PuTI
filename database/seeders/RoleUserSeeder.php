@@ -45,6 +45,12 @@ class RoleUserSeeder extends Seeder
             'manage-modules',
             'manage-master-data',
             'view-audit-logs',
+
+            // Inventaris
+            'view-inventory',
+            'create-inventory',
+            'manage-inventory',
+            'manage-maintenance',
         ];
 
         foreach ($permissions as $permission) {
@@ -68,6 +74,7 @@ class RoleUserSeeder extends Seeder
             'manage-overtime',
             'view-holiday',
             'view-settings',
+            'view-inventory',
         ]);
 
         /** @var Role $studentStaff */
@@ -78,6 +85,9 @@ class RoleUserSeeder extends Seeder
             'view-presence-history',
             'manage-overtime',
             'view-holiday',
+            'view-inventory',
+            'create-inventory',
+            'manage-maintenance',
         ]);
 
         /** @var Role $staff */
@@ -90,6 +100,10 @@ class RoleUserSeeder extends Seeder
             'view-holiday',
             'manage-holiday',
             'view-settings',
+            'view-inventory',
+            'create-inventory',
+            'manage-inventory',
+            'manage-maintenance',
         ]);
 
         /** @var Role $user */

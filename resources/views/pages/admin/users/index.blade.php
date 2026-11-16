@@ -122,15 +122,25 @@
                                         {{ $user->unit?->name ?? ($user->type ?? '-') }}</p>
                                     <p class="text-[11px] text-gray-400">{{ $user->position ?? '-' }}</p>
                                 </td>
-                                <td class="px-5 py-3.5">
-                                    <form method="POST" action="{{ route('admin.users.toggle-status', $user) }}">
+                                <td class="px-5 py-3.5 whitespace-nowrap">
+                                    <form method="POST" action="{{ route('admin.users.toggle-status', $user) }}" class="inline-block">
                                         @csrf
                                         @method('PATCH')
-                                        <button type="submit"
-                                            class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold transition
-                                        {{ $user->is_active ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 hover:bg-emerald-100' : 'bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-400 hover:bg-red-100' }}">
-                                            {{ $user->is_active ? 'Aktif' : 'Nonaktif' }}
-                                        </button>
+                                        <div class="inline-flex items-center p-0.5 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-2xs"
+                                            title="Ubah status akun (Aktif / Nonaktif)">
+                                            <button type="submit" name="status" value="active"
+                                                class="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition {{ $user->is_active ? 'bg-emerald-500 text-white shadow-xs cursor-default' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer' }}"
+                                                {{ $user->is_active ? 'disabled' : '' }}>
+                                                <span class="w-1.5 h-1.5 rounded-full {{ $user->is_active ? 'bg-white' : 'bg-gray-300 dark:bg-gray-600' }}"></span>
+                                                Aktif
+                                            </button>
+                                            <button type="submit" name="status" value="inactive"
+                                                class="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition {{ ! $user->is_active ? 'bg-rose-500 text-white shadow-xs cursor-default' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer' }}"
+                                                {{ ! $user->is_active ? 'disabled' : '' }}>
+                                                <span class="w-1.5 h-1.5 rounded-full {{ ! $user->is_active ? 'bg-white' : 'bg-gray-300 dark:bg-gray-600' }}"></span>
+                                                Nonaktif
+                                            </button>
+                                        </div>
                                     </form>
                                 </td>
                                 <td class="px-5 py-3.5 text-center">
