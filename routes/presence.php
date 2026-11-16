@@ -45,6 +45,7 @@ Route::prefix('presence')->name('presence.')->group(function () {
     // Student staff list
     Route::get('/student-staff', [StudentStaffController::class, 'index'])->name('student-staff');
     Route::post('/student-staff', [StudentStaffController::class, 'store'])->name('student-staff.store');
+    Route::patch('/student-staff/{user}/toggle-status', [StudentStaffController::class, 'toggleStatus'])->name('student-staff.toggle-status');
     Route::put('/student-staff/{user}', [StudentStaffController::class, 'update'])->name('student-staff.update');
     Route::delete('/student-staff/{user}', [StudentStaffController::class, 'destroy'])->name('student-staff.destroy');
 

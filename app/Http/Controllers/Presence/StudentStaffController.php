@@ -15,8 +15,15 @@ class StudentStaffController extends Controller
     public function index(Request $request): View
     {
         $search = $request->query('search');
+        $statusFilter = $request->query('status', 'all');
 
         $query = User::whereNotNull('position');
+
+        if ($statusFilter === 'active') {
+            $query->where('is_active', true);
+        } elseif ($statusFilter === 'inactive') {
+            $query->where('is_active', false);
+        }
 
         if ($search) {
             $query->where(function ($q) use ($search) {
@@ -40,6 +47,7 @@ class StudentStaffController extends Controller
                 'avatar' => null,
                 'role' => $staff->position ?? '-',
                 'type' => $staff->type ?? '-',
+                'is_active' => (bool) $staff->is_active,
                 'spatie_role' => $staff->getRoleNames()->first() ?? '-',
                 'face_registered' => ! is_null($staff->face_descriptor),
             ];
@@ -50,12 +58,15 @@ class StudentStaffController extends Controller
         $totalStaff = User::where('type', 'Staf')->count();
         $totalFaceRegistered = User::whereNotNull('face_descriptor')->count();
 
+        $activeStaffCount = User::whereNotNull('position')->where('is_active', true)->count();
+        $inactiveStaffCount = User::whereNotNull('position')->where('is_active', false)->count();
+
         $activeCount = User::whereHas('presences')->count();
         if ($activeCount === 0) {
-            $activeCount = User::whereNotNull('position')->count();
+            $activeCount = User::whereNotNull('position')->where('is_active', true)->count();
         }
         $totalUsers = User::whereNotNull('position')->count();
-        $activePercentage = $totalUsers > 0 ? round(($activeCount / $totalUsers) * 100) : 100;
+        $activePercentage = $totalUsers > 0 ? round(($activeStaffCount / $totalUsers) * 100) : 100;
 
         return view('pages.presence.student-staff', compact(
             'staffList',
@@ -64,8 +75,11 @@ class StudentStaffController extends Controller
             'totalStaff',
             'totalFaceRegistered',
             'activeCount',
+            'activeStaffCount',
+            'inactiveStaffCount',
             'activePercentage',
-            'search'
+            'search',
+            'statusFilter'
         ));
     }
 
@@ -79,6 +93,7 @@ class StudentStaffController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'type' => ['required', 'string', 'in:Student Staff,Staf'],
             'position' => ['required', 'string', 'max:100'],
+            'is_active' => ['nullable', 'boolean'],
             'password' => ['nullable', Password::defaults()],
         ]);
 
@@ -90,6 +105,7 @@ class StudentStaffController extends Controller
             'phone' => $data['phone'],
             'type' => $data['type'],
             'position' => $data['position'],
+            'is_active' => $request->boolean('is_active', true),
             'password' => Hash::make($data['password'] ?? 'password'),
         ]);
 
@@ -112,6 +128,7 @@ class StudentStaffController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'type' => ['required', 'string', 'in:Student Staff,Staf'],
             'position' => ['required', 'string', 'max:100'],
+            'is_active' => ['nullable', 'boolean'],
             'password' => ['nullable', Password::defaults()],
         ]);
 
@@ -123,6 +140,7 @@ class StudentStaffController extends Controller
             'phone' => $data['phone'],
             'type' => $data['type'],
             'position' => $data['position'],
+            'is_active' => $request->boolean('is_active', true),
         ];
 
         if ($request->filled('password')) {
@@ -142,6 +160,21 @@ class StudentStaffController extends Controller
         }
 
         return back()->with('status', 'Data staff berhasil diperbarui.');
+    }
+
+    public function toggleStatus(User $user): RedirectResponse
+    {
+        if ($user->id === auth()->id()) {
+            return back()->withErrors(['error' => 'Anda tidak dapat menonaktifkan akun Anda sendiri.']);
+        }
+
+        $user->update([
+            'is_active' => ! $user->is_active,
+        ]);
+
+        $label = $user->is_active ? 'diaktifkan' : 'dinonaktifkan';
+
+        return back()->with('status', "Status staff {$user->name} berhasil {$label}.");
     }
 
     public function destroy(User $user): RedirectResponse

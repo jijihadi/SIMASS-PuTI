@@ -141,36 +141,31 @@
     @stack('scripts')
 
     @production
-        {{-- Anti-Inspect Protection --}}
+        {{-- Production Only: Limit Inspect & DevTools (Copy & Right Click Allowed) --}}
         <script>
             (function() {
-                document.addEventListener('contextmenu', function(e) {
-                    e.preventDefault();
-                    return false;
-                });
-
+                // Limit only DevTools shortcuts (F12, Ctrl+Shift+I/J/C, Ctrl+U)
                 document.addEventListener('keydown', function(e) {
                     if (e.key === 'F12') {
                         e.preventDefault();
                         return false;
                     }
-                    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i')) {
+
+                    var isModifier = e.ctrlKey || e.metaKey;
+                    if (!isModifier) {
+                        return;
+                    }
+
+                    var key = e.key.toUpperCase();
+
+                    // DevTools shortcuts: Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C (Inspect Element)
+                    if (e.shiftKey && (key === 'I' || key === 'J' || key === 'C')) {
                         e.preventDefault();
                         return false;
                     }
-                    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'J' || e.key === 'j')) {
-                        e.preventDefault();
-                        return false;
-                    }
-                    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
-                        e.preventDefault();
-                        return false;
-                    }
-                    if ((e.ctrlKey || e.metaKey) && (e.key === 'U' || e.key === 'u')) {
-                        e.preventDefault();
-                        return false;
-                    }
-                    if ((e.ctrlKey || e.metaKey) && (e.key === 'S' || e.key === 's')) {
+
+                    // View Source: Ctrl+U
+                    if (!e.shiftKey && key === 'U') {
                         e.preventDefault();
                         return false;
                     }

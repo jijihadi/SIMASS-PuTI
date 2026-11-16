@@ -82,10 +82,29 @@
             <i data-lucide="search" class="w-4 h-4 text-gray-400 shrink-0"></i>
             <input type="text" name="search" value="{{ $search }}" placeholder="Cari nama, NIM, atau email..."
               class="bg-transparent text-sm outline-none flex-1 min-w-0">
+            @if($statusFilter !== 'all')
+              <input type="hidden" name="status" value="{{ $statusFilter }}">
+            @endif
             @if($search)
-              <a href="{{ route('presence.student-staff') }}" class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">Reset</a>
+              <a href="{{ route('presence.student-staff', ['status' => $statusFilter]) }}" class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">Reset</a>
             @endif
           </form>
+
+          <!-- Status Filter Tabs -->
+          <div class="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl text-xs">
+            <a href="{{ route('presence.student-staff', array_filter(['search' => $search, 'status' => 'all'])) }}"
+              class="px-3 py-1.5 rounded-lg font-medium transition {{ $statusFilter === 'all' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white' }}">
+              Semua
+            </a>
+            <a href="{{ route('presence.student-staff', array_filter(['search' => $search, 'status' => 'active'])) }}"
+              class="px-3 py-1.5 rounded-lg font-medium transition {{ $statusFilter === 'active' ? 'bg-white dark:bg-gray-700 text-emerald-700 dark:text-emerald-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white' }}">
+              Aktif ({{ $activeStaffCount }})
+            </a>
+            <a href="{{ route('presence.student-staff', array_filter(['search' => $search, 'status' => 'inactive'])) }}"
+              class="px-3 py-1.5 rounded-lg font-medium transition {{ $statusFilter === 'inactive' ? 'bg-white dark:bg-gray-700 text-rose-700 dark:text-rose-400 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white' }}">
+              Nonaktif ({{ $inactiveStaffCount }})
+            </a>
+          </div>
         </div>
 
         <x-button variant="primary" icon="user-plus" onclick="openTambahStaffModal()">
@@ -101,6 +120,7 @@
               <th class="px-5 py-3.5 text-left font-semibold">Foto & Profile</th>
               <th class="px-5 py-3.5 text-left font-semibold">Jabatan</th>
               <th class="px-5 py-3.5 text-left font-semibold">Kategori</th>
+              <th class="px-5 py-3.5 text-left font-semibold">Status</th>
               <th class="px-5 py-3.5 text-left font-semibold">Presensi Wajah</th>
               <th class="px-5 py-3.5 text-center font-semibold">AKSI</th>
             </tr>
@@ -154,6 +174,20 @@
                   @endif
                 </td>
 
+                <!-- Status Akun -->
+                <td class="px-5 py-4">
+                  <form action="{{ route('presence.student-staff.toggle-status', $staff['id']) }}" method="POST">
+                    @csrf
+                    @method('PATCH')
+                    <button type="submit"
+                      class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border transition {{ $staff['is_active'] ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800' : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800' }}"
+                      title="Klik untuk ubah status">
+                      <span class="w-1.5 h-1.5 rounded-full {{ $staff['is_active'] ? 'bg-emerald-500' : 'bg-rose-500' }}"></span>
+                      {{ $staff['is_active'] ? 'Aktif' : 'Nonaktif' }}
+                    </button>
+                  </form>
+                </td>
+
                 <!-- Presensi Wajah -->
                 <td class="px-5 py-4">
                   @if ($staff['face_registered'])
@@ -175,7 +209,7 @@
                 <td class="px-5 py-4 text-center">
                   <div class="flex items-center justify-center gap-1.5">
                     <x-button variant="table" icon="pencil"
-                      onclick="openEditStaffModal('{{ $staff['id'] }}', '{{ addslashes($staff['name']) }}', '{{ addslashes($staff['username']) }}', '{{ addslashes($staff['nim']) }}', '{{ addslashes($staff['phone']) }}', '{{ addslashes($staff['role']) }}', '{{ addslashes($staff['email']) }}', '{{ $staff['type'] }}')"
+                      onclick="openEditStaffModal('{{ $staff['id'] }}', '{{ addslashes($staff['name']) }}', '{{ addslashes($staff['username']) }}', '{{ addslashes($staff['nim']) }}', '{{ addslashes($staff['phone']) }}', '{{ addslashes($staff['role']) }}', '{{ addslashes($staff['email']) }}', '{{ $staff['type'] }}', {{ $staff['is_active'] ? 'true' : 'false' }})"
                       title="Edit Staff">
                       Edit
                     </x-button>
@@ -209,23 +243,46 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-3 gap-2 text-xs pt-1">
+            <div class="grid grid-cols-4 gap-2 text-xs pt-1">
               <div>
                 <p class="text-gray-400">Jabatan</p>
-                <p class="font-medium text-gray-700 dark:text-gray-300 mt-0.5">{{ $staff['role'] }}</p>
+                <p class="font-medium text-gray-700 dark:text-gray-300 mt-0.5 truncate">{{ $staff['role'] }}</p>
               </div>
               <div>
                 <p class="text-gray-400">Kategori</p>
-                <p class="font-medium text-gray-700 dark:text-gray-300 mt-0.5">{{ $staff['type'] }}</p>
+                <p class="font-medium text-gray-700 dark:text-gray-300 mt-0.5 truncate">{{ $staff['type'] }}</p>
+              </div>
+              <div>
+                <p class="text-gray-400">Status</p>
+                <form action="{{ route('presence.student-staff.toggle-status', $staff['id']) }}" method="POST" class="mt-0.5">
+                  @csrf
+                  @method('PATCH')
+                  <button type="submit" class="text-xs font-semibold {{ $staff['is_active'] ? 'text-emerald-600' : 'text-rose-600' }}">
+                    {{ $staff['is_active'] ? 'Aktif' : 'Nonaktif' }}
+                  </button>
+                </form>
               </div>
               <div>
                 <p class="text-gray-400">Presensi Wajah</p>
                 @if ($staff['face_registered'])
                   <p class="font-medium text-green-600 dark:text-green-400 mt-0.5">Terdaftar</p>
                 @else
-                  <p class="font-medium text-amber-600 dark:text-amber-400 mt-0.5">Belum Terdaftar</p>
+                  <p class="font-medium text-amber-600 dark:text-amber-400 mt-0.5">Belum</p>
                 @endif
               </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <x-button variant="table" icon="pencil"
+                onclick="openEditStaffModal('{{ $staff['id'] }}', '{{ addslashes($staff['name']) }}', '{{ addslashes($staff['username']) }}', '{{ addslashes($staff['nim']) }}', '{{ addslashes($staff['phone']) }}', '{{ addslashes($staff['role']) }}', '{{ addslashes($staff['email']) }}', '{{ $staff['type'] }}', {{ $staff['is_active'] ? 'true' : 'false' }})"
+                title="Edit Staff">
+                Edit
+              </x-button>
+              <x-button variant="table-danger" icon="trash-2"
+                onclick="confirmDelete('{{ route('presence.student-staff.destroy', $staff['id']) }}', '{{ addslashes($staff['name']) }}')"
+                title="Hapus Staff">
+                Hapus
+              </x-button>
             </div>
           </div>
         @endforeach
@@ -317,6 +374,14 @@
         </select>
       </div>
       <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Status Akun</label>
+        <select name="is_active" required
+          class="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-telkom-500">
+          <option value="1" selected>Aktif</option>
+          <option value="0">Nonaktif</option>
+        </select>
+      </div>
+      <div>
         <label class="block text-xs font-semibold text-gray-500 mb-1">Password</label>
         <input type="password" name="password" placeholder="Default: password"
           class="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-telkom-500">
@@ -372,6 +437,14 @@
         </select>
       </div>
       <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Status Akun</label>
+        <select id="edit_is_active" name="is_active" required
+          class="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-telkom-500">
+          <option value="1">Aktif</option>
+          <option value="0">Nonaktif</option>
+        </select>
+      </div>
+      <div>
         <label class="block text-xs font-semibold text-gray-500 mb-1">Password Baru (Kosongkan jika tidak diubah)</label>
         <input type="password" name="password" autocomplete="new-password"
           class="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-telkom-500">
@@ -390,7 +463,7 @@
       openModal('tambahStaffModal');
     }
 
-    function openEditStaffModal(id, name, username, nim, phone, position, email, type) {
+    function openEditStaffModal(id, name, username, nim, phone, position, email, type, isActive) {
       document.getElementById('editStaffForm').action = `/presence/student-staff/${id}`;
       document.getElementById('edit_name').value = name;
       document.getElementById('edit_username').value = username;
@@ -399,6 +472,7 @@
       document.getElementById('edit_position').value = position;
       document.getElementById('edit_email').value = email;
       document.getElementById('edit_type').value = type;
+      document.getElementById('edit_is_active').value = isActive ? '1' : '0';
       openModal('editStaffModal');
     }
   </script>

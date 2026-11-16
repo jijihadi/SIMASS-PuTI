@@ -42,13 +42,34 @@
                   Coba lagi dalam: <span id="lockCountdown" class="font-bold tabular-nums">{{ $lockSeconds }}s</span>
                 </p>
               @endif
+              <form action="{{ route('login.reset-lockout') }}" method="POST" class="mt-3">
+                @csrf
+                <input type="hidden" name="username" value="{{ old('username') }}">
+                <button type="submit"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-600 hover:bg-orange-700 text-white transition shadow-sm">
+                  <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                  <span>Reset Kunci Percobaan</span>
+                </button>
+              </form>
             </div>
           </div>
         </div>
       @else
         <div
-          class="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
-          {{ $errorMsg }}
+          class="mb-4 p-3.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
+          <div class="flex items-start justify-between gap-3">
+            <div>{{ $errorMsg }}</div>
+            <form action="{{ route('login.reset-lockout') }}" method="POST" class="shrink-0">
+              @csrf
+              <input type="hidden" name="username" value="{{ old('username') }}">
+              <button type="submit"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-red-100 hover:bg-red-200 text-red-800 dark:bg-red-950/60 dark:hover:bg-red-900/80 dark:text-red-300 transition"
+                title="Reset counter kesalahan login">
+                <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                <span>Reset</span>
+              </button>
+            </form>
+          </div>
         </div>
       @endif
     @endif

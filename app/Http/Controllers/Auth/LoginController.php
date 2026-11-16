@@ -49,6 +49,13 @@ class LoginController extends Controller
         // Find user by username
         $user = User::where('username', $request->username)->first();
 
+        // Check if user account is active
+        if ($user && ! $user->is_active) {
+            return back()->withErrors([
+                'username' => 'Akun Anda berstatus nonaktif. Silakan hubungi administrator.',
+            ])->onlyInput('username');
+        }
+
         if (! $user || ! Auth::attempt(
             ['email' => $user->email, 'password' => $request->password],
             $request->boolean('remember')
@@ -77,6 +84,19 @@ class LoginController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('login');
+    }
+
+    public function resetLockout(Request $request): RedirectResponse
+    {
+        $username = $request->input('username');
+        if ($username) {
+            $rateLimiterKey = 'login:'.strtolower($username).'|'.$request->ip();
+            RateLimiter::clear($rateLimiterKey);
+        }
+
+        RateLimiter::clear('login:|'.$request->ip());
+
+        return back()->with('status', 'Kunci percobaan login berhasil direset. Silakan coba masuk kembali.');
     }
 
     /**

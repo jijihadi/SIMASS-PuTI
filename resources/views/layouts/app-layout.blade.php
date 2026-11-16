@@ -111,15 +111,31 @@
   </script>
 
   @production
-  {{-- Anti-Inspect Protection (Aggressive) --}}
+  {{-- Production Only: Limit Inspect & DevTools (Copy & Right Click Allowed) --}}
   <script>
     (function() {
-      // 1. Disable Right Click & Common Keys
-      document.addEventListener('contextmenu', e => e.preventDefault());
-      document.addEventListener('keydown', e => {
-        const block = ['F12', 'I', 'J', 'C', 'U', 'S', 'P'];
-        if (e.key === 'F12' || ((e.ctrlKey || e.metaKey) && (e.shiftKey && block.includes(e.key
-            .toUpperCase()) || block.includes(e.key.toUpperCase())))) {
+      // 1. Limit Inspect & DevTools Shortcuts Only (Do NOT block Ctrl+C / Copy)
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'F12') {
+          e.preventDefault();
+          return false;
+        }
+
+        const isModifier = e.ctrlKey || e.metaKey;
+        if (!isModifier) {
+          return;
+        }
+
+        const key = e.key.toUpperCase();
+
+        // Limit only DevTools shortcuts: Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C (Inspect Element)
+        if (e.shiftKey && (key === 'I' || key === 'J' || key === 'C')) {
+          e.preventDefault();
+          return false;
+        }
+
+        // Limit View Source: Ctrl+U
+        if (!e.shiftKey && key === 'U') {
           e.preventDefault();
           return false;
         }
