@@ -314,8 +314,8 @@
       const form = document.getElementById('editForm');
       
       form.action = `/presence/${id}`;
-      document.getElementById('editJamMasuk').value = cin && cin !== '-' ? cin.substring(0, 5) : '';
-      document.getElementById('editJamPulang').value = cout && cout !== '-' ? cout.substring(0, 5) : '';
+      window.setPickerValue('editJamMasuk', cin && cin !== '-' ? cin.substring(0, 5) : '');
+      window.setPickerValue('editJamPulang', cout && cout !== '-' ? cout.substring(0, 5) : '');
       document.getElementById('editPekerjaan').value = pekerjaan;
       validateEditCheckoutTime();
 
@@ -337,7 +337,9 @@
     }
 
     document.getElementById('editJamMasuk').addEventListener('input', validateEditCheckoutTime);
+    document.getElementById('editJamMasuk').addEventListener('change', validateEditCheckoutTime);
     document.getElementById('editJamPulang').addEventListener('input', validateEditCheckoutTime);
+    document.getElementById('editJamPulang').addEventListener('change', validateEditCheckoutTime);
     document.getElementById('editForm').addEventListener('submit', function (event) {
       if (!validateEditCheckoutTime()) {
         event.preventDefault();
