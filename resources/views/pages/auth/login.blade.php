@@ -31,7 +31,7 @@
 
       @if ($isLocked)
         <div
-          class="mb-4 p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-sm">
+          class="mb-4 p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-sm shake-error">
           <div class="flex items-start gap-3">
             <i data-lucide="alert-triangle" class="w-5 h-5 text-orange-500 mt-0.5 shrink-0"></i>
             <div>
@@ -42,34 +42,16 @@
                   Coba lagi dalam: <span id="lockCountdown" class="font-bold tabular-nums">{{ $lockSeconds }}s</span>
                 </p>
               @endif
-              <form action="{{ route('login.reset-lockout') }}" method="POST" class="mt-3">
-                @csrf
-                <input type="hidden" name="username" value="{{ old('username') }}">
-                <button type="submit"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-600 hover:bg-orange-700 text-white transition shadow-sm">
-                  <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
-                  <span>Reset Kunci Percobaan</span>
-                </button>
-              </form>
+              <p class="text-xs text-orange-600/90 dark:text-orange-400/80 mt-1.5">
+                Hubungi administrator PuTI jika perlu membuka kunci lebih cepat.
+              </p>
             </div>
           </div>
         </div>
       @else
         <div
-          class="mb-4 p-3.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
-          <div class="flex items-start justify-between gap-3">
-            <div>{{ $errorMsg }}</div>
-            <form action="{{ route('login.reset-lockout') }}" method="POST" class="shrink-0">
-              @csrf
-              <input type="hidden" name="username" value="{{ old('username') }}">
-              <button type="submit"
-                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-red-100 hover:bg-red-200 text-red-800 dark:bg-red-950/60 dark:hover:bg-red-900/80 dark:text-red-300 transition"
-                title="Reset counter kesalahan login">
-                <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
-                <span>Reset</span>
-              </button>
-            </form>
-          </div>
+          class="mb-4 p-3.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm shake-error">
+          {{ $errorMsg }}
         </div>
       @endif
     @endif
@@ -106,7 +88,7 @@
         <a href="#" class="text-telkom-600 dark:text-telkom-400 font-semibold hover:underline">Lupa Password?</a>
       </div>
       <button type="submit" id="btnSubmit"
-        class="w-full py-3.5 gradient-telkom text-white rounded-xl font-semibold hover:opacity-90 transition shadow-lg shadow-telkom-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
+        class="w-full py-3.5 gradient-telkom text-white rounded-xl font-semibold hover:opacity-90 active:scale-[0.98] transition duration-150 shadow-lg shadow-telkom-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
         Masuk
       </button>
     </form>

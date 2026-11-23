@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Unit;
@@ -187,6 +188,24 @@ class UserController extends Controller
         $statusText = $user->is_active ? 'diaktifkan' : 'dinonaktifkan';
 
         return back()->with('success', "Akun {$user->name} berhasil {$statusText}.");
+    }
+
+    public function resetLockout(Request $request, User $user): RedirectResponse
+    {
+        LoginController::clearLockoutForUser($user);
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'action' => 'user.lockout_reset',
+            'model_type' => User::class,
+            'model_id' => $user->id,
+            'new_values' => ['username' => $user->username],
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'created_at' => now(),
+        ]);
+
+        return back()->with('success', "Kunci percobaan login untuk {$user->name} berhasil direset.");
     }
 
     public function destroy(Request $request, User $user): RedirectResponse

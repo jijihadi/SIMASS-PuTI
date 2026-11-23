@@ -22,13 +22,13 @@
 @endphp
 
 <div id="{{ $id }}"
-  class="fixed inset-0 z-[100] hidden items-center justify-center opacity-0 transition-opacity duration-300"
+  class="fixed inset-0 z-[100] hidden items-center justify-center opacity-0 transition-opacity duration-200 ease-out"
   {{ $attributes }}>
   <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"
     @if ($closeOnBackdrop) onclick="closeModal('{{ $id }}')" @endif></div>
 
   <div id="{{ $id }}Content"
-    class="relative bg-white dark:bg-gray-900 rounded-2xl w-full {{ $sizeClass }} mx-4 overflow-hidden transform scale-95 transition-transform duration-300">
+    class="relative bg-white dark:bg-gray-900 rounded-2xl w-full {{ $sizeClass }} mx-4 overflow-hidden transform scale-[0.97] transition-transform duration-200 ease-out">
     <div class="p-5 sm:p-6 flex flex-col h-full max-h-[90vh] overflow-y-auto">
       @if (isset($header) || !empty($title) || $showCloseButton)
         <div class="flex items-center justify-between mb-6">
@@ -78,7 +78,7 @@
 
     setTimeout(() => {
       modal.classList.remove('opacity-0');
-      content.classList.remove('scale-95');
+      content.classList.remove('scale-[0.97]');
     }, 10);
   }
 
@@ -89,12 +89,12 @@
     if (!modal || !content) return;
 
     modal.classList.add('opacity-0');
-    content.classList.add('scale-95');
+    content.classList.add('scale-[0.97]');
 
     setTimeout(() => {
       modal.classList.add('hidden');
       modal.classList.remove('flex');
-    }, 300);
+    }, 200);
   }
 </script>
 @endpushonce

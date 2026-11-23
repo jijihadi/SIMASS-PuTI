@@ -99,12 +99,12 @@
                                     <p class="text-gray-700 dark:text-gray-300">{{ $user->email ?? '-' }}</p>
                                     <p class="text-[11px] text-gray-400">{{ $user->phone ?? '-' }}</p>
                                 </td>
-                                <td class="px-5 py-3.5">
+                                <td class="px-5 py-3.5 whitespace-nowrap">
                                     @php
                                         $roleName = $user->roles->first()?->name ?? 'user';
                                     @endphp
                                     <span
-                                        class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold
+                                        class="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-md text-[11px] font-semibold
                                     {{ $roleName === 'super-admin'
                                         ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
                                         : ($roleName === 'unit-head' || $roleName === 'unit_head'
@@ -145,6 +145,35 @@
                                 </td>
                                 <td class="px-5 py-3.5 text-center">
                                     <div class="inline-flex items-center gap-1.5">
+                                        @php
+                                            $isLockedOut = \App\Http\Controllers\Auth\LoginController::isUserLockedOut($user);
+                                            $hasFailedAttempts = $isLockedOut || \App\Http\Controllers\Auth\LoginController::hasFailedAttempts($user);
+                                        @endphp
+                                        @if ($hasFailedAttempts)
+                                            <form method="POST" action="{{ route('admin.users.reset-lockout', $user) }}" class="inline">
+                                                @csrf
+                                                @if ($isLockedOut)
+                                                    <x-button type="submit" variant="table-amber" icon="unlock"
+                                                        class="!bg-amber-500 !text-white hover:!bg-amber-600 ring-2 ring-amber-300/60 dark:ring-amber-700/60 whitespace-nowrap"
+                                                        title="Akun sedang terkunci — klik untuk buka kunci login">
+                                                        Buka Kunci
+                                                    </x-button>
+                                                @else
+                                                    <x-button type="submit" variant="table" icon="rotate-ccw"
+                                                        class="whitespace-nowrap"
+                                                        title="Terdapat percobaan login gagal — klik untuk reset">
+                                                        Reset Lock
+                                                    </x-button>
+                                                @endif
+                                            </form>
+                                        @else
+                                            <x-button type="button" variant="table" icon="rotate-ccw" disabled
+                                                class="!opacity-40 !cursor-not-allowed whitespace-nowrap"
+                                                title="Tidak ada percobaan login gagal">
+                                                Reset Lock
+                                            </x-button>
+                                        @endif
+
                                         <x-button variant="table" icon="edit-3"
                                             @click="openEdit({
                                                 id: {{ $user->id }},

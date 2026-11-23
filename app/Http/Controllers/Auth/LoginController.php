@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\View\View;
 
@@ -63,8 +64,9 @@ class LoginController extends Controller
             ['email' => $user->email, 'password' => $request->password],
             $request->boolean('remember')
         )) {
-            // Increment failed attempts
+            // Increment failed attempts & track key so Admin can unlock from any IP
             RateLimiter::hit($rateLimiterKey, self::DECAY_SECONDS);
+            $this->trackThrottleKey($rateLimiterKey, $loginIdentifier, $user);
 
             return back()->withErrors([
                 'username' => 'Username atau password yang Anda masukkan salah.',
@@ -73,6 +75,7 @@ class LoginController extends Controller
 
         // Login success — clear rate limiter
         RateLimiter::clear($rateLimiterKey);
+        self::clearLockoutForUser($user);
 
         $request->session()->regenerate();
 
@@ -89,25 +92,98 @@ class LoginController extends Controller
         return redirect()->route('login');
     }
 
-    public function resetLockout(Request $request): RedirectResponse
+    /**
+     * Check whether a user currently has any active login lockout across tracked IPs.
+     */
+    public static function isUserLockedOut(User $user): bool
     {
-        $username = $request->input('username');
-        if ($username) {
-            $rateLimiterKey = 'login:'.strtolower($username).'|'.$request->ip();
-            RateLimiter::clear($rateLimiterKey);
+        foreach (self::trackedKeysForUser($user) as $key) {
+            if (RateLimiter::tooManyAttempts($key, self::MAX_ATTEMPTS)) {
+                return true;
+            }
         }
 
-        RateLimiter::clear('login:|'.$request->ip());
+        return false;
+    }
 
-        return back()->with('status', 'Kunci percobaan login berhasil direset. Silakan coba masuk kembali.');
+    /**
+     * Check whether a user currently has any recorded failed login attempts across tracked IPs.
+     */
+    public static function hasFailedAttempts(User $user): bool
+    {
+        foreach (self::trackedKeysForUser($user) as $key) {
+            if (RateLimiter::attempts($key) > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Clear all login attempt lockouts for a user across all tracked IPs (Admin action).
+     */
+    public static function clearLockoutForUser(User $user): void
+    {
+        foreach (self::trackedKeysForUser($user) as $key) {
+            RateLimiter::clear($key);
+        }
+
+        foreach (self::userIdentifiers($user) as $identifier) {
+            Cache::forget("login:keys:{$identifier}");
+        }
     }
 
     /**
      * Get the rate limiter key for the request.
-     * Combines username + IP to avoid blocking different users from same IP.
+     * Combines normalized username/email + IP to avoid blocking different users on shared campus Wi-Fi.
      */
     private function throttleKey(Request $request): string
     {
-        return 'login:'.strtolower($request->input('username')).'|'.$request->ip();
+        return 'login:'.strtolower(trim((string) $request->input('username'))).'|'.$request->ip();
+    }
+
+    private function trackThrottleKey(string $rateLimiterKey, string $loginIdentifier, ?User $user): void
+    {
+        $identifiers = array_filter(array_unique(array_merge(
+            [$loginIdentifier],
+            $user ? self::userIdentifiers($user) : []
+        )));
+
+        foreach ($identifiers as $identifier) {
+            $cacheKey = "login:keys:{$identifier}";
+            /** @var list<string> $keys */
+            $keys = Cache::get($cacheKey, []);
+            if (! in_array($rateLimiterKey, $keys, true)) {
+                $keys[] = $rateLimiterKey;
+            }
+            Cache::put($cacheKey, $keys, self::DECAY_SECONDS);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function trackedKeysForUser(User $user): array
+    {
+        $allKeys = [];
+        foreach (self::userIdentifiers($user) as $identifier) {
+            /** @var list<string> $keys */
+            $keys = Cache::get("login:keys:{$identifier}", []);
+            $allKeys = array_merge($allKeys, $keys);
+        }
+
+        return array_values(array_unique($allKeys));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function userIdentifiers(User $user): array
+    {
+        return array_values(array_filter(array_unique([
+            $user->username ? strtolower(trim($user->username)) : null,
+            $user->email ? strtolower(trim($user->email)) : null,
+        ])));
     }
 }

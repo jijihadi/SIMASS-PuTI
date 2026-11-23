@@ -18,7 +18,6 @@ Route::redirect('/', '/login', 301);
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'index'])->name('login');
     Route::post('/login', [LoginController::class, 'authenticate']);
-    Route::post('/login/reset-lockout', [LoginController::class, 'resetLockout'])->name('login.reset-lockout');
 });
 
 Route::post('/logout', [LoginController::class, 'logout'])

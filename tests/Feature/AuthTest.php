@@ -51,13 +51,20 @@ test('guest cannot access presence routes', function () {
 // 2. Login Throttling, Lockout Reset, Case-Insensitivity & Active Guard
 // =========================================================================
 
-test('login is throttled after 3 failed attempts and can be reset with reset-lockout route', function () {
+test('login is throttled after 3 failed attempts and only admin can reset lockout', function () {
+    Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']);
+    Role::firstOrCreate(['name' => 'staff', 'guard_name' => 'web']);
+
+    $admin = User::factory()->create(['is_active' => true]);
+    $admin->assignRole('super-admin');
+
     $user = User::factory()->create([
         'username' => 'testuser',
         'email' => 'testuser@example.com',
         'password' => Hash::make('correct-password'),
         'is_active' => true,
     ]);
+    $user->assignRole('staff');
 
     $throttleKey = 'login:testuser|127.0.0.1';
     RateLimiter::clear($throttleKey);
@@ -89,14 +96,23 @@ test('login is throttled after 3 failed attempts and can be reset with reset-loc
     $res4->assertSessionHasErrors(['username']);
     expect(session('errors')->first('username'))->toContain('Terlalu banyak percobaan login');
 
-    // Reset lockout clears limiter
-    $this->from('/login')->post('/login/reset-lockout', [
-        'username' => 'testuser',
-    ])->assertRedirect('/login')
-        ->assertSessionHas('status', 'Kunci percobaan login berhasil direset. Silakan coba masuk kembali.');
-    expect(RateLimiter::tooManyAttempts($throttleKey, 3))->toBeFalse();
+    // Public reset endpoint must not exist
+    $this->post('/login/reset-lockout', ['username' => 'testuser'])->assertNotFound();
 
-    // Login succeeds after reset
+    // Non-admin cannot reset lockout
+    $this->actingAs($user)->post("/admin/users/{$user->id}/reset-lockout")->assertForbidden();
+    $this->post('/logout');
+
+    // Admin resets lockout from Admin Console (even from a different IP)
+    $this->actingAs($admin)
+        ->withServerVariables(['REMOTE_ADDR' => '10.0.0.50'])
+        ->post("/admin/users/{$user->id}/reset-lockout")
+        ->assertRedirect()
+        ->assertSessionHas('success');
+    expect(RateLimiter::tooManyAttempts($throttleKey, 3))->toBeFalse();
+    $this->post('/logout');
+
+    // Login succeeds after admin reset
     $this->from('/login')->post('/login', [
         'username' => 'testuser',
         'password' => 'correct-password',
