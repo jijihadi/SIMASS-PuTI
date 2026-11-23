@@ -8,6 +8,7 @@ use App\Models\InventoryItem;
 use App\Models\Ticket;
 use App\Models\TicketMessage;
 use App\Models\TicketSlaLog;
+use App\Models\User;
 use App\Services\InventorySyncService;
 use App\Services\LunaAiService;
 use App\Services\TicketAssignmentService;
@@ -32,8 +33,9 @@ class TicketingController extends Controller
      */
     public function index(): View
     {
-        $userId = Auth::id();
-        $isStaff = Auth::user()->hasAnyRole(['super-admin', 'staff', 'student-staff']) || Auth::user()->type === 'Staf';
+        $user = $this->currentUser();
+        $userId = $user->id;
+        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
 
         $baseQuery = $isStaff ? Ticket::query() : Ticket::where('user_id', $userId);
 
@@ -82,7 +84,7 @@ class TicketingController extends Controller
             'location' => 'nullable|string|max:255',
             'inventory_item_id' => 'nullable|exists:inventory_items,id',
             'priority' => 'required|in:low,medium,high,urgent',
-            'attachment' => 'nullable|file|mimes:jpeg,png,jpg,webp,pdf|max:5120',
+            'attachment' => 'nullable|file|mimes:jpeg,png,jpg,webp,heic,heif,pdf|max:10240',
         ]);
 
         $attachmentPath = null;
@@ -157,7 +159,7 @@ class TicketingController extends Controller
         ]);
 
         if ($linkedItem) {
-            $this->inventorySync->syncFromTicket($ticket, Auth::user());
+            $this->inventorySync->syncFromTicket($ticket, $this->currentUser());
         }
 
         // 5. Initial User Message
@@ -225,7 +227,7 @@ class TicketingController extends Controller
      */
     public function show(Ticket $ticket): View
     {
-        $user = Auth::user();
+        $user = $this->currentUser();
         $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
 
         // Authorization check: User can only view their own ticket, unless staff
@@ -246,7 +248,7 @@ class TicketingController extends Controller
      */
     public function reply(Request $request, Ticket $ticket): RedirectResponse
     {
-        $user = Auth::user();
+        $user = $this->currentUser();
         $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
 
         if (! $isStaff && $ticket->user_id !== $user->id) {
@@ -261,7 +263,7 @@ class TicketingController extends Controller
 
         $validated = $request->validate([
             'message' => 'required|string|min:2',
-            'attachment' => 'nullable|file|mimes:jpeg,png,jpg,webp,pdf|max:5120',
+            'attachment' => 'nullable|file|mimes:jpeg,png,jpg,webp,heic,heif,pdf|max:10240',
             'is_internal' => 'nullable|boolean',
         ]);
 
@@ -330,7 +332,7 @@ class TicketingController extends Controller
      */
     public function updateStatus(Request $request, Ticket $ticket): RedirectResponse
     {
-        $user = Auth::user();
+        $user = $this->currentUser();
         $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
 
         if (! $isStaff) {
@@ -454,7 +456,7 @@ class TicketingController extends Controller
      */
     public function cancel(Request $request, Ticket $ticket): RedirectResponse
     {
-        $user = Auth::user();
+        $user = $this->currentUser();
 
         if ($ticket->user_id !== $user->id) {
             abort(403, 'Hanya pelapor yang dapat membatalkan tiket ini.');
@@ -510,7 +512,7 @@ class TicketingController extends Controller
      */
     public function overrideScope(Request $request, Ticket $ticket): RedirectResponse
     {
-        $user = Auth::user();
+        $user = $this->currentUser();
         $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
 
         if (! $isStaff) {
@@ -545,7 +547,7 @@ class TicketingController extends Controller
             TicketSlaLog::create([
                 'ticket_id' => $ticket->id,
                 'paused_at' => $now,
-                'reason' => 'Manual Override: Dialihkan ke Koordinasi Sistem Terpusat ('.$validated['override_notes'].')',
+                'reason' => 'Manual Override: Dialihkan ke Koordinasi Sistem Terpusat (' . $validated['override_notes'] . ')',
                 'created_by' => $user->id,
             ]);
 
@@ -604,7 +606,7 @@ class TicketingController extends Controller
      */
     public function linkInventory(Request $request, Ticket $ticket): RedirectResponse
     {
-        $user = Auth::user();
+        $user = $this->currentUser();
         $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
 
         if (! $isStaff) {
@@ -646,7 +648,7 @@ class TicketingController extends Controller
      */
     public function tasks(Request $request): View
     {
-        $user = Auth::user();
+        $user = $this->currentUser();
         $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
 
         if (! $isStaff) {
@@ -711,7 +713,7 @@ class TicketingController extends Controller
      */
     public function history(Request $request): View
     {
-        $user = Auth::user();
+        $user = $this->currentUser();
         $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
 
         $query = Ticket::with(['user', 'assignee'])->latest();
@@ -781,5 +783,13 @@ class TicketingController extends Controller
             'reply' => $reply,
             'timestamp' => now()->format('H:i'),
         ]);
+    }
+
+    private function currentUser(): User
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        return $user;
     }
 }

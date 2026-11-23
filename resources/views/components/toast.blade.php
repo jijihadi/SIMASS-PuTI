@@ -184,53 +184,90 @@
     }
   };
 
-  // Intercept forms using onsubmit confirm(...)
+  // Intercept forms using data-confirm or onsubmit confirm(...) + double-submit guard
   document.addEventListener('submit', function(e) {
     const form = e.target;
-    if (!form || form.dataset.swalBypassed) return;
-    const onsubmitAttr = form.getAttribute('onsubmit');
-    if (onsubmitAttr && onsubmitAttr.includes('confirm(')) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const match = onsubmitAttr.match(/confirm\(['"](.*?)['"]\)/);
-      const text = match ? match[1] : 'Apakah Anda yakin ingin melanjutkan tindakan ini?';
+    if (!form) return;
 
-      if (typeof Swal !== 'undefined') {
-        Swal.fire({
-          title: 'Konfirmasi',
-          text: text,
-          icon: 'warning',
-          showCancelButton: true,
-          confirmButtonText: 'Ya, Lanjutkan',
-          cancelButtonText: 'Batal',
-          reverseButtons: true,
-          customClass: {
-            popup: 'rounded-3xl dark:bg-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800 shadow-2xl p-6',
-            confirmButton: 'px-4 py-2.5 rounded-xl text-sm font-semibold bg-telkom-600 hover:bg-telkom-700 text-white transition shadow-sm',
-            cancelButton: 'px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-150 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-750 text-gray-700 dark:text-gray-300 mr-2 transition'
-          },
-          buttonsStyling: false
-        }).then((res) => {
-          if (res.isConfirmed) {
+    // 1. Confirmation dialog (supports safe data-confirm attribute & legacy onsubmit confirm)
+    if (!form.dataset.swalBypassed) {
+      const dataConfirm = form.getAttribute('data-confirm');
+      const onsubmitAttr = form.getAttribute('onsubmit');
+      let confirmText = null;
+
+      if (dataConfirm) {
+        confirmText = dataConfirm;
+      } else if (onsubmitAttr && onsubmitAttr.includes('confirm(')) {
+        const match = onsubmitAttr.match(/confirm\(['"](.*?)['"]\)/);
+        confirmText = match ? match[1] : 'Apakah Anda yakin ingin melanjutkan tindakan ini?';
+      }
+
+      if (confirmText !== null) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            title: 'Konfirmasi',
+            text: confirmText,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, Lanjutkan',
+            cancelButtonText: 'Batal',
+            reverseButtons: true,
+            customClass: {
+              popup: 'rounded-3xl dark:bg-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-800 shadow-2xl p-6',
+              confirmButton: 'px-4 py-2.5 rounded-xl text-sm font-semibold bg-telkom-600 hover:bg-telkom-700 text-white transition shadow-sm',
+              cancelButton: 'px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-150 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-750 text-gray-700 dark:text-gray-300 mr-2 transition'
+            },
+            buttonsStyling: false
+          }).then((res) => {
+            if (res.isConfirmed) {
+              form.dataset.swalBypassed = 'true';
+              form.submit();
+            }
+          });
+        } else {
+          if (window.confirm(confirmText)) {
             form.dataset.swalBypassed = 'true';
             form.submit();
           }
-        });
-      } else {
-        if (window.confirm(text)) {
-          form.dataset.swalBypassed = 'true';
-          form.submit();
         }
+        return;
       }
+    }
+
+    // 2. Global double-submit protection for mutating forms (POST/PUT/PATCH/DELETE)
+    const method = (form.getAttribute('method') || 'GET').toUpperCase();
+    if (method !== 'GET' && !form.hasAttribute('data-allow-resubmit')) {
+      if (form.dataset.submitting === 'true') {
+        e.preventDefault();
+        return;
+      }
+      form.dataset.submitting = 'true';
+      const submitBtns = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+      submitBtns.forEach((btn) => {
+        btn.dataset.prevDisabled = btn.disabled ? '1' : '0';
+        btn.disabled = true;
+        btn.classList.add('opacity-60', 'cursor-wait');
+      });
+      // Safety fallback in case request fails/aborts without navigation
+      setTimeout(() => {
+        form.dataset.submitting = 'false';
+        submitBtns.forEach((btn) => {
+          if (btn.dataset.prevDisabled === '0') btn.disabled = false;
+          btn.classList.remove('opacity-60', 'cursor-wait');
+        });
+      }, 4500);
     }
   }, true);
 
   document.addEventListener('DOMContentLoaded', () => {
-    @if(session('success')) showToast("{!! addslashes(session('success')) !!}", 'success'); @endif
-    @if(session('status')) showToast("{!! addslashes(session('status')) !!}", 'success'); @endif
-    @if(session('error')) showToast("{!! addslashes(session('error')) !!}", 'error'); @endif
-    @if($errors->any()) showToast("{!! addslashes($errors->first()) !!}", 'error'); @endif
-    @if(session('info')) showToast("{!! addslashes(session('info')) !!}", 'info'); @endif
-    @if(session('warning')) showToast("{!! addslashes(session('warning')) !!}", 'warning'); @endif
+    @if(session('success')) showToast(@js(session('success')), 'success'); @endif
+    @if(session('status')) showToast(@js(session('status')), 'success'); @endif
+    @if(session('error')) showToast(@js(session('error')), 'error'); @endif
+    @if($errors->any()) showToast(@js($errors->first()), 'error'); @endif
+    @if(session('info')) showToast(@js(session('info')), 'info'); @endif
+    @if(session('warning')) showToast(@js(session('warning')), 'warning'); @endif
   });
 </script>

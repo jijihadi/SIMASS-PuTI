@@ -46,8 +46,11 @@ class LoginController extends Controller
             ])->onlyInput('username');
         }
 
-        // Find user by username
-        $user = User::where('username', $request->username)->first();
+        // Find user case-insensitively by username or email (handles capital letters & extra spaces)
+        $loginIdentifier = strtolower(trim((string) $request->username));
+        $user = User::whereRaw('LOWER(username) = ?', [$loginIdentifier])
+            ->orWhereRaw('LOWER(email) = ?', [$loginIdentifier])
+            ->first();
 
         // Check if user account is active
         if ($user && ! $user->is_active) {

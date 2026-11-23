@@ -106,7 +106,7 @@
                                         </span>
                                         <!-- Delete -->
                                         <form method="POST" action="{{ route('holiday.destroy', $holiday) }}"
-                                            onsubmit="return confirm('Anda akan menghapus {{ $holiday->naem }}, aksi ini tidak dapat dibatalkan')"
+                                            data-confirm="Anda akan menghapus {{ $holiday->name }}, aksi ini tidak dapat dibatalkan?"
                                             class="inline">
                                             @csrf
                                             @method('DELETE')

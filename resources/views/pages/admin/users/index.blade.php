@@ -162,7 +162,7 @@
                                         </x-button>
 
                                         <form method="POST" action="{{ route('admin.users.destroy', $user) }}"
-                                            onsubmit="return confirm('Anda akan menghapus pengguna {{ $user->name }}, aksi ini tidak bisa dibatalkan?')"
+                                            data-confirm="Anda akan menghapus pengguna {{ $user->name }}, aksi ini tidak bisa dibatalkan?"
                                             class="inline">
                                             @csrf
                                             @method('DELETE')

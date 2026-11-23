@@ -38,6 +38,7 @@ return [
     'luna' => [
         'api_key' => env('LUNA_API_KEY'),
         'allowed_wa_number' => env('LUNA_ALLOWED_WA_NUMBER'),
+        'kb_path' => env('LUNA_KB_PATH', storage_path('app/luna-knowledge-base')),
     ],
 
 ];

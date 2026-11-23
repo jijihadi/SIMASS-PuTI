@@ -2,20 +2,24 @@
 
 use App\Models\Setting;
 use App\Models\User;
+use App\Providers\AppServiceProvider;
 use Carbon\Carbon;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Tests\TestCase;
 
-uses(RefreshDatabase::class);
-
+/** @var TestCase $this */
 beforeEach(function () {
     Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']);
     Role::firstOrCreate(['name' => 'staff', 'guard_name' => 'web']);
     Permission::firstOrCreate(['name' => 'manage-roles', 'guard_name' => 'web']);
 });
+
+// =========================================================================
+// 1. Seasonal Effects
+// =========================================================================
 
 test('auto mode follows the month', function (int $month, ?string $expected) {
     expect(Setting::seasonalEffect(Carbon::create(2026, $month, 15)))->toBe($expected);
@@ -74,4 +78,29 @@ test('non-admin cannot change the seasonal effect', function () {
         ->assertForbidden();
 
     expect(Setting::where('key', 'seasonal_effect')->exists())->toBeFalse();
+});
+
+// =========================================================================
+// 2. Codespaces / Proxy URL Host Pinning
+// =========================================================================
+
+function bootBehindRewrittenHost(string $env, string $appUrl): void
+{
+    app()['env'] = $env;
+    config(['app.url' => $appUrl]);
+    url()->setRequest(Request::create('http://localhost:8000/login'));
+    (new AppServiceProvider(app()))->boot();
+}
+
+test('local https APP_URL pins generated URLs to the APP_URL host', function () {
+    bootBehindRewrittenHost('local', 'https://demo-8000.app.github.dev');
+
+    expect(route('login'))->toBe('https://demo-8000.app.github.dev/login')
+        ->and(asset('build/app.css'))->toBe('https://demo-8000.app.github.dev/build/app.css');
+});
+
+test('production keeps the request host', function () {
+    bootBehindRewrittenHost('production', 'https://simass.example');
+
+    expect(route('login'))->toBe('https://localhost:8000/login');
 });
