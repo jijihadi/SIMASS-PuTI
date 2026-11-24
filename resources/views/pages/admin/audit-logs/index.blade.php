@@ -6,7 +6,14 @@
 <div class="space-y-6">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Audit Log Administratif</h1>
+            <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
+                <span>Audit Log Administratif</span>
+                <span id="auditLogLiveBadge"
+                    class="hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Live Stream</span>
+                </span>
+            </h1>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Catatan seluruh mutasi data, pembuatan akun, dan aksi sistem.</p>
         </div>
         <x-button variant="secondary" size="sm" icon="arrow-left" href="{{ route('admin.dashboard') }}">
@@ -28,7 +35,7 @@
     </div>
 
     {{-- Audit Logs Table --}}
-    <div class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+    <div data-audit-table-card class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs text-gray-600 dark:text-gray-400">
                 <thead class="bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 font-bold uppercase border-b border-gray-200 dark:border-gray-800">
@@ -88,4 +95,46 @@
         @endif
     </div>
 </div>
+
+@push('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!window.SimassRealtime) return;
+
+        const badge = document.getElementById('auditLogLiveBadge');
+        let refreshTimer = null;
+
+        function refreshAuditTable() {
+            clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(res => res.ok ? res.text() : null)
+                    .then(html => {
+                        if (!html) return;
+                        const doc = new DOMParser().parseFromString(html, 'text/html');
+                        const nextCard = doc.querySelector('[data-audit-table-card]');
+                        const currCard = document.querySelector('[data-audit-table-card]');
+                        if (nextCard && currCard) {
+                            currCard.innerHTML = nextCard.innerHTML;
+                            if (window.createIcons) window.createIcons();
+                        }
+                    })
+                    .catch(() => {});
+            }, 300);
+        }
+
+        window.SimassRealtime.subscribeAdminAudit({
+            onConnectionChange(connected) {
+                if (badge) badge.classList.toggle('hidden', !connected);
+            },
+            onAuditRecorded(e) {
+                if (typeof window.showToast === 'function' && e?.action) {
+                    window.showToast(`Audit baru: ${e.actor_name || 'Sistem'} — ${e.action} (${e.model_label || ''})`, 'info', 3500);
+                }
+                refreshAuditTable();
+            },
+        });
+    });
+</script>
+@endpush
 @endsection

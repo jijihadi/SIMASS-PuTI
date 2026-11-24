@@ -9,9 +9,14 @@
   <!-- Header Bar with Audio Engine Controls -->
   <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-sm">
     <div>
-      <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+      <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
         <i data-lucide="radio" class="w-5 h-5 text-telkom-600 animate-pulse"></i>
         <span>NOC Live Dispatch Board</span>
+        <span id="nocRealtimeBadge"
+          class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+          <span id="nocRealtimeDot" class="w-2 h-2 rounded-full bg-amber-500"></span>
+          <span id="nocRealtimeLabel">Polling</span>
+        </span>
       </h2>
       <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
         Pantau aliran tiket masuk secara berkala. Notifikasi suara otomatis berbunyi saat ada tiket baru.
@@ -32,8 +37,32 @@
     </div>
   </div>
 
+  <!-- Live Network Alert Banner (NING Webhook) -->
+  <div id="nocNetworkAlertBanner"
+    class="hidden rounded-2xl border p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition duration-150">
+    <div class="flex items-start gap-3">
+      <div id="nocNetworkAlertIconWrap" class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0">
+        <i data-lucide="wifi-off" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <p id="nocNetworkAlertTitle" class="text-sm font-bold"></p>
+        <p id="nocNetworkAlertMessage" class="text-xs mt-0.5 opacity-90"></p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <a id="nocNetworkAlertLink" href="#"
+        class="hidden px-3 py-1.5 rounded-xl bg-white/90 dark:bg-gray-900/90 text-xs font-bold shadow-sm hover:opacity-90 transition">
+        Buka Tiket
+      </a>
+      <button type="button" onclick="document.getElementById('nocNetworkAlertBanner').classList.add('hidden')"
+        class="p-1.5 rounded-lg opacity-70 hover:opacity-100 transition" aria-label="Tutup alert">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </div>
+
   <!-- Filter Tabs Bar -->
-  <div class="flex items-center gap-2 overflow-x-auto pb-2 text-xs font-semibold">
+  <div data-noc-tabs class="flex items-center gap-2 overflow-x-auto pb-2 text-xs font-semibold">
     @php
       $tabList = [
         'all'         => ['label' => 'Semua Antrean Aktif', 'count' => $counts['all']],
@@ -60,7 +89,7 @@
 
   <!-- Ticket Grid List -->
   @if($tickets->isEmpty())
-    <div class="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-12 text-center shadow-sm">
+    <div data-noc-list class="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-12 text-center shadow-sm">
       <div class="w-14 h-14 rounded-3xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 mx-auto mb-3">
         <i data-lucide="check-circle" class="w-7 h-7 text-emerald-500"></i>
       </div>
@@ -68,7 +97,7 @@
       <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Semua tiket pada filter terpilih telah selesai atau belum ada tiket baru.</p>
     </div>
   @else
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+    <div data-noc-list class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
       @foreach($tickets as $ticket)
         <div class="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm hover:border-telkom-500 dark:hover:border-telkom-500 transition flex flex-col justify-between space-y-4">
           
@@ -223,8 +252,146 @@
     }, 450);
   };
 
-  // Background Polling for New Tickets (Every 15 Seconds)
+  let isRealtimeConnected = false;
+  let boardRefreshTimer = null;
+
+  function scheduleBoardRefresh() {
+    clearTimeout(boardRefreshTimer);
+    boardRefreshTimer = setTimeout(() => {
+      fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(res => res.ok ? res.text() : null)
+        .then(html => {
+          if (!html) return;
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          const nextTabs = doc.querySelector('[data-noc-tabs]');
+          const currTabs = document.querySelector('[data-noc-tabs]');
+          if (nextTabs && currTabs) {
+            currTabs.innerHTML = nextTabs.innerHTML;
+          }
+
+          const nextList = doc.querySelector('[data-noc-list]');
+          const currList = document.querySelector('[data-noc-list]');
+          if (nextList && currList) {
+            currList.replaceWith(nextList);
+          }
+
+          if (window.createIcons) window.createIcons();
+        })
+        .catch(() => {});
+    }, 250);
+  }
+
+  function updateRealtimeBadge(connected) {
+    isRealtimeConnected = Boolean(connected);
+    const badge = document.getElementById('nocRealtimeBadge');
+    const dot = document.getElementById('nocRealtimeDot');
+    const label = document.getElementById('nocRealtimeLabel');
+    if (!badge || !dot || !label) return;
+
+    if (connected) {
+      badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900';
+      dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+      label.textContent = 'Live';
+    } else {
+      badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
+      dot.className = 'w-2 h-2 rounded-full bg-amber-500';
+      label.textContent = 'Polling';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!window.SimassRealtime) return;
+
+    window.SimassRealtime.subscribeNoc({
+      onConnectionChange: updateRealtimeBadge,
+      onTicketCreated(ticket) {
+        if (ticket?.id && ticket.id > lastSeenTicketId) {
+          lastSeenTicketId = ticket.id;
+        }
+
+        if (isSoundActive) {
+          playChime();
+          setTimeout(() => {
+            const cat = ticket?.service_item || ticket?.category || 'Layanan PuTI';
+            const title = ticket?.title || '';
+            speakAnnouncement(`Tiket baru masuk. Layanan ${cat}. ${title}`);
+          }, 450);
+        }
+
+        if (typeof window.showToast === 'function') {
+          window.showToast(`Tiket baru #${ticket?.ticket_number || ticket?.id}: ${ticket?.title || ''}`, 'info', 4500);
+        }
+
+        scheduleBoardRefresh();
+      },
+      onTicketUpdated() {
+        scheduleBoardRefresh();
+      },
+      onNetworkAlert(alert) {
+        if (!alert) return;
+        const banner = document.getElementById('nocNetworkAlertBanner');
+        const iconWrap = document.getElementById('nocNetworkAlertIconWrap');
+        const titleEl = document.getElementById('nocNetworkAlertTitle');
+        const msgEl = document.getElementById('nocNetworkAlertMessage');
+        const linkEl = document.getElementById('nocNetworkAlertLink');
+
+        const styles = {
+          critical: {
+            banner: 'rounded-2xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-900 dark:text-rose-100 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition duration-150',
+            icon: 'w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-300 flex items-center justify-center shrink-0',
+            toast: 'error',
+          },
+          warning: {
+            banner: 'rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-100 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition duration-150',
+            icon: 'w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-300 flex items-center justify-center shrink-0',
+            toast: 'warning',
+          },
+          resolved: {
+            banner: 'rounded-2xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-100 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition duration-150',
+            icon: 'w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0',
+            toast: 'success',
+          },
+        };
+
+        const theme = styles[alert.severity] || styles.warning;
+        if (banner && iconWrap && titleEl && msgEl) {
+          banner.className = theme.banner;
+          iconWrap.className = theme.icon;
+          titleEl.textContent = `${alert.label || alert.event_type} — ${alert.device_name || 'Perangkat Jaringan'}`;
+          msgEl.textContent = alert.message || '';
+
+          if (linkEl) {
+            const safeUrl = typeof alert.ticket_url === 'string' && (alert.ticket_url.startsWith('/') || alert.ticket_url.startsWith('http://') || alert.ticket_url.startsWith('https://'));
+            if (safeUrl) {
+              linkEl.href = alert.ticket_url;
+              linkEl.textContent = alert.ticket_number ? `Buka ${alert.ticket_number}` : 'Buka Tiket';
+              linkEl.classList.remove('hidden');
+            } else {
+              linkEl.classList.add('hidden');
+            }
+          }
+          if (window.createIcons) window.createIcons();
+        }
+
+        if (isSoundActive) {
+          playChime();
+          setTimeout(() => {
+            speakAnnouncement(`Peringatan jaringan NING. ${alert.label || ''}. ${alert.device_name || ''}.`);
+          }, 450);
+        }
+
+        if (typeof window.showToast === 'function') {
+          window.showToast(`${alert.label || alert.event_type}: ${alert.device_name || ''}`, theme.toast, 5000);
+        }
+
+        scheduleBoardRefresh();
+      },
+    });
+  });
+
+  // Fallback Polling for New Tickets (Every 15 Seconds when WebSocket disconnected)
   setInterval(() => {
+    if (isRealtimeConnected) return;
     fetch('{{ route('ticket.tasks-poll') }}')
       .then(res => res.json())
       .then(data => {

@@ -41,4 +41,8 @@ return [
         'kb_path' => env('LUNA_KB_PATH', storage_path('app/luna-knowledge-base')),
     ],
 
+    'ning' => [
+        'webhook_secret' => env('NING_WEBHOOK_SECRET'),
+    ],
+
 ];

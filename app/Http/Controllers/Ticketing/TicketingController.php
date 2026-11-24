@@ -35,7 +35,7 @@ class TicketingController extends Controller
     {
         $user = $this->currentUser();
         $userId = $user->id;
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         $baseQuery = $isStaff ? Ticket::query() : Ticket::where('user_id', $userId);
 
@@ -228,7 +228,7 @@ class TicketingController extends Controller
     public function show(Ticket $ticket): View
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         // Authorization check: User can only view their own ticket, unless staff
         if (! $isStaff && $ticket->user_id !== $user->id) {
@@ -249,7 +249,7 @@ class TicketingController extends Controller
     public function reply(Request $request, Ticket $ticket): RedirectResponse
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         if (! $isStaff && $ticket->user_id !== $user->id) {
             abort(403, 'Akses ditolak.');
@@ -333,7 +333,7 @@ class TicketingController extends Controller
     public function updateStatus(Request $request, Ticket $ticket): RedirectResponse
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         if (! $isStaff) {
             abort(403, 'Hanya staf yang dapat mengubah status tiket.');
@@ -513,7 +513,7 @@ class TicketingController extends Controller
     public function overrideScope(Request $request, Ticket $ticket): RedirectResponse
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         if (! $isStaff) {
             abort(403, 'Akses ditolak.');
@@ -547,7 +547,7 @@ class TicketingController extends Controller
             TicketSlaLog::create([
                 'ticket_id' => $ticket->id,
                 'paused_at' => $now,
-                'reason' => 'Manual Override: Dialihkan ke Koordinasi Sistem Terpusat (' . $validated['override_notes'] . ')',
+                'reason' => 'Manual Override: Dialihkan ke Koordinasi Sistem Terpusat ('.$validated['override_notes'].')',
                 'created_by' => $user->id,
             ]);
 
@@ -607,7 +607,7 @@ class TicketingController extends Controller
     public function linkInventory(Request $request, Ticket $ticket): RedirectResponse
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         if (! $isStaff) {
             abort(403, 'Akses ditolak.');
@@ -649,7 +649,7 @@ class TicketingController extends Controller
     public function tasks(Request $request): View
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         if (! $isStaff) {
             abort(403, 'Halaman ini khusus untuk staf dan teknisi PuTI.');
@@ -714,7 +714,7 @@ class TicketingController extends Controller
     public function history(Request $request): View
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         $query = Ticket::with(['user', 'assignee'])->latest();
 

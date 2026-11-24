@@ -4,6 +4,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  @if(config('broadcasting.default') === 'reverb' && config('broadcasting.connections.reverb.key'))
+    <meta name="reverb-key" content="{{ config('broadcasting.connections.reverb.key') }}">
+    <meta name="reverb-host" content="{{ config('broadcasting.connections.reverb.options.host') }}">
+    <meta name="reverb-port" content="{{ config('broadcasting.connections.reverb.options.port') }}">
+    <meta name="reverb-scheme" content="{{ config('broadcasting.connections.reverb.options.scheme') }}">
+  @endif
   <title>{!! html_entity_decode(strip_tags(trim($__env->yieldContent('title', 'Presensi')))) !!} — Portal PuTI</title>
   <link rel="icon" type="image/webp" href="{{ asset('logo-puti.webp') }}">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

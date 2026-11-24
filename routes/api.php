@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\LunaKnowledgeBaseController;
 use App\Http\Controllers\Api\V1\LunaTicketApiController;
+use App\Http\Controllers\Api\V1\NingWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/luna')
@@ -24,4 +25,11 @@ Route::prefix('v1/luna')
         Route::get('/knowledge-base/{document}', [LunaKnowledgeBaseController::class, 'show'])->name('kb.show');
         Route::put('/knowledge-base/{document}', [LunaKnowledgeBaseController::class, 'update'])->name('kb.update');
         Route::delete('/knowledge-base/{document}', [LunaKnowledgeBaseController::class, 'destroy'])->name('kb.destroy');
+    });
+
+Route::prefix('v1/ning')
+    ->name('api.v1.ning.')
+    ->middleware(['throttle:120,1', 'ning.webhook'])
+    ->group(function () {
+        Route::post('/webhook', [NingWebhookController::class, 'handle'])->name('webhook');
     });

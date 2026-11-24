@@ -40,7 +40,7 @@
             </div>
 
             <!-- Quick Card Presensi Hari Ini -->
-            <div
+            <div data-presence-today-card
                 class="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 p-6 flex flex-col justify-between">
                 <div>
                     <div class="flex items-center justify-between mb-4">
@@ -238,9 +238,16 @@
             </div>
 
             <!-- Aktivitas Terbaru -->
-            <div class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
+            <div data-presence-recent class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="font-bold">Aktivitas Terbaru</h3>
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-bold">Aktivitas Terbaru</h3>
+                        <span id="presenceDashboardLiveBadge"
+                            class="hidden inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>Live</span>
+                        </span>
+                    </div>
                     <a href="{{ route('presence.history') }}"
                         class="text-xs text-telkom-600 font-semibold hover:underline">Lihat
                         semua</a>
@@ -473,6 +480,54 @@
                     }
                 });
             });
+
+            if (window.SimassRealtime) {
+                let dashboardRefreshTimer = null;
+
+                function refreshDashboardPresence() {
+                    clearTimeout(dashboardRefreshTimer);
+                    dashboardRefreshTimer = setTimeout(() => {
+                        fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                            .then(res => res.ok ? res.text() : null)
+                            .then(html => {
+                                if (!html) return;
+                                const doc = new DOMParser().parseFromString(html, 'text/html');
+                                ['[data-presence-today-card]', '[data-presence-recent]'].forEach((selector) => {
+                                    const nextEl = doc.querySelector(selector);
+                                    const currEl = document.querySelector(selector);
+                                    if (nextEl && currEl) {
+                                        currEl.innerHTML = nextEl.innerHTML;
+                                    }
+                                });
+                                const liveBadge = document.getElementById('presenceDashboardLiveBadge');
+                                if (liveBadge && window.SimassRealtime.isConnected()) {
+                                    liveBadge.classList.remove('hidden');
+                                }
+                                if (window.createIcons) window.createIcons();
+                            })
+                            .catch(() => {});
+                    }, 300);
+                }
+
+                window.SimassRealtime.subscribePresence({
+                    onConnectionChange(connected) {
+                        const liveBadge = document.getElementById('presenceDashboardLiveBadge');
+                        if (liveBadge) liveBadge.classList.toggle('hidden', !connected);
+                    },
+                    onPresenceRecorded(e) {
+                        const labels = {
+                            check_in: 'baru saja check-in',
+                            check_out: 'baru saja check-out',
+                            updated: 'memperbarui presensi',
+                            deleted: 'menghapus catatan presensi',
+                        };
+                        if (typeof window.showToast === 'function' && e?.user_name) {
+                            window.showToast(`${e.user_name} ${labels[e.action] || 'memperbarui presensi'}`, 'info', 4000);
+                        }
+                        refreshDashboardPresence();
+                    },
+                });
+            }
         });
     </script>
 @endsection

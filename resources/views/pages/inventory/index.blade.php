@@ -38,7 +38,13 @@
         <div
             class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-sm">
             <div>
-                <h2 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white">Inventaris Aset Fisik & Digital
+                <h2 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
+                    <span>Inventaris Aset Fisik & Digital</span>
+                    <span id="inventoryIndexLiveBadge"
+                        class="hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>Live</span>
+                    </span>
                 </h2>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     Kelola perangkat keras dan lisensi digital/software dengan pemantauan status serta kondisi terkini.
@@ -60,7 +66,7 @@
         </div>
 
         <!-- KPI Stats -->
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div data-inventory-stats class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <div class="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
                 <div class="flex items-center justify-between text-gray-500 text-xs font-semibold uppercase">
                     <span>Total Aset</span>
@@ -186,7 +192,7 @@
         </div>
 
         <!-- Assets Table -->
-        <div
+        <div data-inventory-table-card
             class="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
             @if ($items->isEmpty())
                 <div class="p-12 text-center">
@@ -682,4 +688,57 @@
         </div>
 
     </div>
+
+    @push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!window.SimassRealtime) return;
+
+            let inventoryRefreshTimer = null;
+            const liveBadge = document.getElementById('inventoryIndexLiveBadge');
+
+            function refreshInventoryList() {
+                clearTimeout(inventoryRefreshTimer);
+                inventoryRefreshTimer = setTimeout(() => {
+                    fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        .then(res => res.ok ? res.text() : null)
+                        .then(html => {
+                            if (!html) return;
+                            const doc = new DOMParser().parseFromString(html, 'text/html');
+                            ['[data-inventory-stats]', '[data-inventory-table-card]'].forEach((selector) => {
+                                const nextEl = doc.querySelector(selector);
+                                const currEl = document.querySelector(selector);
+                                if (nextEl && currEl) {
+                                    currEl.innerHTML = nextEl.innerHTML;
+                                }
+                            });
+                            if (window.createIcons) window.createIcons();
+                        })
+                        .catch(() => {});
+                }, 300);
+            }
+
+            window.SimassRealtime.subscribeInventory({
+                onConnectionChange(connected) {
+                    if (liveBadge) liveBadge.classList.toggle('hidden', !connected);
+                },
+                onItemUpdated(e) {
+                    const labels = {
+                        created: 'ditambahkan',
+                        updated: 'diperbarui',
+                        deleted: 'dihapus',
+                    };
+                    if (typeof window.showToast === 'function' && e?.asset_code) {
+                        const actionText = labels[e.action] || 'diperbarui';
+                        const detail = e.action === 'deleted'
+                            ? ''
+                            : ` (${e.status_label || e.status} • ${e.condition_label || e.condition})`;
+                        window.showToast(`Aset ${e.asset_code} ${actionText}${detail}`, 'info', 4000);
+                    }
+                    refreshInventoryList();
+                },
+            });
+        });
+    </script>
+    @endpush
 @endsection

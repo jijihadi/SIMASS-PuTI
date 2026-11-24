@@ -68,13 +68,20 @@
     </div>
 
     {{-- ── CARD TABLE ── --}}
-    <div class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+    <div data-presence-list-card class="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
 
       {{-- Table header / title --}}
-      <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-        <h2 class="font-bold text-base text-gray-900 dark:text-gray-100">Daftar Presensi Student Staff</h2>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Riwayat presensi berdasarkan rentang tanggal yang
-          dipilih</p>
+      <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+        <div>
+          <h2 class="font-bold text-base text-gray-900 dark:text-gray-100">Daftar Presensi Student Staff</h2>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Riwayat presensi berdasarkan rentang tanggal yang
+            dipilih</p>
+        </div>
+        <span id="presenceListLiveBadge"
+          class="hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Live</span>
+        </span>
       </div>
 
       <!-- Table (desktop) -->
@@ -514,5 +521,55 @@
         window.originalCloseModal(id);
       }
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!window.SimassRealtime) return;
+
+      let refreshTimer = null;
+      const badge = document.getElementById('presenceListLiveBadge');
+
+      function refreshPresenceList() {
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(() => {
+          fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(res => res.ok ? res.text() : null)
+            .then(html => {
+              if (!html) return;
+              const doc = new DOMParser().parseFromString(html, 'text/html');
+              const nextCard = doc.querySelector('[data-presence-list-card]');
+              const currCard = document.querySelector('[data-presence-list-card]');
+              if (nextCard && currCard) {
+                currCard.innerHTML = nextCard.innerHTML;
+                const updatedBadge = document.getElementById('presenceListLiveBadge');
+                if (updatedBadge && window.SimassRealtime.isConnected()) {
+                  updatedBadge.classList.remove('hidden');
+                }
+                if (window.createIcons) window.createIcons();
+              }
+            })
+            .catch(() => {});
+        }, 300);
+      }
+
+      window.SimassRealtime.subscribePresence({
+        onConnectionChange(connected) {
+          const el = document.getElementById('presenceListLiveBadge') || badge;
+          if (el) el.classList.toggle('hidden', !connected);
+        },
+        onPresenceRecorded(e) {
+          const labels = {
+            check_in: 'melakukan check-in',
+            check_out: 'melakukan check-out',
+            updated: 'memperbarui presensi',
+            deleted: 'menghapus presensi',
+          };
+          const actionText = labels[e?.action] || 'memperbarui presensi';
+          if (typeof window.showToast === 'function' && e?.user_name) {
+            window.showToast(`${e.user_name} ${actionText}`, 'info', 4000);
+          }
+          refreshPresenceList();
+        },
+      });
+    });
   </script>
 @endpush

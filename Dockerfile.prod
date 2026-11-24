@@ -8,7 +8,7 @@ RUN npm run build
 FROM serversideup/php:8.4-fpm-nginx
 
 USER root
-RUN install-php-extensions gd bcmath
+RUN install-php-extensions gd bcmath pcntl sockets
 USER www-data
 
 COPY --chown=www-data:www-data . /var/www/html

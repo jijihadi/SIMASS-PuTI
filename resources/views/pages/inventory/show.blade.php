@@ -6,10 +6,15 @@
 @section('content')
 <div x-data="{ assetType: '{{ $item->asset_type }}' }" class="space-y-6">
 
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between gap-3">
     <x-button variant="secondary" size="sm" icon="arrow-left" href="{{ route('inventory.index') }}">
       Kembali ke Daftar Inventaris
     </x-button>
+    <span id="inventoryShowLiveBadge"
+      class="hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span>Live Sync</span>
+    </span>
   </div>
 
   @if(session('success'))
@@ -425,4 +430,44 @@
   </div>
 
 </div>
+
+@push('scripts')
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!window.SimassRealtime) return;
+
+    const currentItemId = @js($item->id);
+    const badge = document.getElementById('inventoryShowLiveBadge');
+
+    window.SimassRealtime.subscribeInventory({
+      onConnectionChange(connected) {
+        if (badge) badge.classList.toggle('hidden', !connected);
+      },
+      onItemUpdated(e) {
+        if (!e || String(e.id) !== String(currentItemId)) return;
+
+        if (e.action === 'deleted') {
+          if (typeof window.showToast === 'function') {
+            window.showToast(`Aset ${e.asset_code || ''} baru saja dihapus oleh operator lain.`, 'warning', 5000);
+          }
+          return;
+        }
+
+        if (typeof window.showToast === 'function') {
+          window.showToast(
+            `Aset ${e.asset_code || ''} diperbarui (${e.status_label || e.status} • ${e.condition_label || e.condition})`,
+            'info',
+            4500
+          );
+        }
+
+        const isEditingForm = document.activeElement && document.activeElement.matches('input, textarea, select');
+        if (!isEditingForm) {
+          setTimeout(() => window.location.reload(), 1200);
+        }
+      },
+    });
+  });
+</script>
+@endpush
 @endsection

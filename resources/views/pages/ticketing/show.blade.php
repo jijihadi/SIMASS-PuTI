@@ -112,11 +112,28 @@
             <i data-lucide="messages-square" class="w-5 h-5 text-telkom-600 dark:text-telkom-400"></i>
             <span>Percakapan & Histori Penanganan</span>
           </h3>
-          <span class="text-xs text-gray-400">{{ $ticket->messages->count() }} aktivitas</span>
+          <span id="ticketMessageCount" class="text-xs text-gray-400">{{ $ticket->messages->count() }} aktivitas</span>
+        </div>
+
+        <!-- Live Viewers / Agent Collision Prevention Bar -->
+        <div id="ticketPresenceBar"
+          class="hidden flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/70 dark:border-gray-700/70 text-xs">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="inline-flex items-center gap-1.5 font-semibold text-gray-600 dark:text-gray-300">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Sedang melihat:</span>
+            </span>
+            <div id="ticketPresenceChips" class="flex items-center gap-1.5 flex-wrap"></div>
+          </div>
+          <span id="ticketStaffCollisionWarning"
+            class="hidden inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+            <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
+            <span>Teknisi lain sedang membuka tiket ini</span>
+          </span>
         </div>
 
         <!-- Messages List -->
-        <div class="space-y-4">
+        <div id="ticketThreadContainer" class="space-y-4">
           @foreach($ticket->messages as $msg)
             @if($msg->sender_type === 'system')
               <!-- System Log Message -->
@@ -201,6 +218,17 @@
           @endforeach
         </div>
 
+        <!-- Live Typing Indicator -->
+        <div id="ticketTypingIndicator"
+          class="hidden flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 px-1">
+          <span class="inline-flex gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-telkom-500 animate-bounce"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-telkom-500 animate-bounce [animation-delay:120ms]"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-telkom-500 animate-bounce [animation-delay:240ms]"></span>
+          </span>
+          <span id="ticketTypingText"></span>
+        </div>
+
         <!-- Reply Box Form -->
         @if(!$ticket->isFinalStatus())
           <div class="pt-6 border-t border-gray-100 dark:border-gray-800">
@@ -271,7 +299,7 @@
               ];
               $badgeStyle = $badgeStyles[$ticket->user_status_color] ?? $badgeStyles['gray'];
             @endphp
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full font-bold border {{ $badgeStyle }}">
+            <span id="ticketStatusBadge" class="inline-flex items-center px-2.5 py-1 rounded-full font-bold border {{ $badgeStyle }}">
               {{ $ticket->user_status_label }}
             </span>
           </div>
@@ -332,7 +360,7 @@
           <!-- Teknisi -->
           <div class="flex items-center justify-between">
             <span class="text-gray-500">Teknisi PIC:</span>
-            <span class="font-semibold text-telkom-600 dark:text-telkom-400">
+            <span id="ticketAssigneeName" class="font-semibold text-telkom-600 dark:text-telkom-400">
               {{ $ticket->assignee?->name ?? 'Belum Ditugaskan' }}
             </span>
           </div>
@@ -610,5 +638,338 @@
   </div>
 </div>
 @endif
+
+@push('scripts')
+<script>
+  window.SimassActiveTicketId = @js($ticket->id);
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!window.SimassRealtime) return;
+
+    const ticketId = @js($ticket->id);
+    const isStaff = @js($isStaff);
+    const threadContainer = document.getElementById('ticketThreadContainer');
+    const countEl = document.getElementById('ticketMessageCount');
+    const statusBadge = document.getElementById('ticketStatusBadge');
+    const assigneeNameEl = document.getElementById('ticketAssigneeName');
+
+    const renderedMessageIds = new Set(@js($ticket->messages->pluck('id')->all()));
+    let messageCount = {{ $ticket->messages->count() }};
+
+    const badgeStyles = {
+      blue: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900',
+      amber: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900',
+      purple: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-900',
+      orange: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900',
+      emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900',
+      rose: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900',
+      gray: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
+    };
+
+    function isSafeUrl(url) {
+      return typeof url === 'string' && (url.startsWith('/') || url.startsWith('http://') || url.startsWith('https://'));
+    }
+
+    function appendMultilineText(target, text) {
+      const lines = String(text ?? '').split(/\r?\n/);
+      lines.forEach((line, idx) => {
+        if (idx > 0) target.appendChild(document.createElement('br'));
+        target.appendChild(document.createTextNode(line));
+      });
+    }
+
+    function makeIcon(name, className) {
+      const icon = document.createElement('i');
+      icon.setAttribute('data-lucide', name);
+      icon.className = className;
+      return icon;
+    }
+
+    function buildAttachmentBlock(url, borderClass, linkClass, labelText) {
+      const wrap = document.createElement('div');
+      wrap.className = `mt-2 pt-2 border-t ${borderClass}`;
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.className = linkClass;
+      link.appendChild(makeIcon('paperclip', 'w-3.5 h-3.5'));
+      link.appendChild(document.createTextNode(' ' + labelText));
+      wrap.appendChild(link);
+      return wrap;
+    }
+
+    function buildMessageElement(msg) {
+      const timeHuman = msg.created_at_human || '';
+      const timeFull = msg.created_at_full || timeHuman;
+      const senderName = msg.sender_name || 'Sistem';
+
+      if (msg.sender_type === 'system') {
+        const div = document.createElement('div');
+        div.className = 'my-3 px-4 py-2.5 rounded-2xl bg-gray-50 dark:bg-gray-850/60 border border-gray-200/60 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-400 text-center font-medium';
+        appendMultilineText(div, msg.message);
+        const ts = document.createElement('span');
+        ts.className = 'block text-[10px] text-gray-400 mt-0.5';
+        ts.textContent = timeFull;
+        div.appendChild(ts);
+        return div;
+      }
+
+      if (msg.is_internal) {
+        if (!isStaff) return null;
+        const card = document.createElement('div');
+        card.className = 'p-4 rounded-2xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-sm space-y-1.5 shadow-sm';
+
+        const header = document.createElement('div');
+        header.className = 'flex items-center justify-between text-xs font-bold text-amber-800 dark:text-amber-300';
+
+        const left = document.createElement('span');
+        left.className = 'flex items-center gap-1.5';
+        left.appendChild(makeIcon('lock', 'w-3.5 h-3.5'));
+        left.appendChild(document.createTextNode(` Catatan Internal Khusus Staf (Oleh: ${senderName})`));
+
+        const right = document.createElement('span');
+        right.className = 'font-normal text-amber-600 dark:text-amber-400 text-[10px]';
+        right.textContent = timeHuman || 'Baru saja';
+
+        header.appendChild(left);
+        header.appendChild(right);
+
+        const body = document.createElement('p');
+        body.className = 'text-xs text-amber-900 dark:text-amber-200 leading-relaxed';
+        appendMultilineText(body, msg.message);
+
+        card.appendChild(header);
+        card.appendChild(body);
+        return card;
+      }
+
+      if (msg.sender_type === 'ai_luna') {
+        const row = document.createElement('div');
+        row.className = 'flex items-start gap-3 max-w-[88%]';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'w-9 h-9 rounded-2xl bg-telkom-50 dark:bg-telkom-950/60 text-telkom-600 dark:text-telkom-400 flex items-center justify-center shrink-0 border border-telkom-200 dark:border-telkom-900 shadow-sm mt-0.5';
+        avatar.appendChild(makeIcon('bot', 'w-5 h-5'));
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bg-gray-50 dark:bg-gray-800/80 p-4 rounded-3xl rounded-tl-sm border border-gray-200 dark:border-gray-700/60 text-sm text-gray-800 dark:text-gray-200 leading-relaxed shadow-sm';
+
+        const meta = document.createElement('div');
+        meta.className = 'flex items-center gap-2 mb-1';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'font-bold text-xs text-telkom-600 dark:text-telkom-400';
+        nameEl.textContent = 'Luna AI';
+        const badgeEl = document.createElement('span');
+        badgeEl.className = 'text-[9px] px-1.5 py-0.5 rounded bg-telkom-100 dark:bg-telkom-900 text-telkom-700 dark:text-telkom-300 font-semibold';
+        badgeEl.textContent = 'Asisten Virtual';
+        const timeEl = document.createElement('span');
+        timeEl.className = 'text-[10px] text-gray-400 ml-auto';
+        timeEl.textContent = timeHuman;
+
+        meta.appendChild(nameEl);
+        meta.appendChild(badgeEl);
+        meta.appendChild(timeEl);
+
+        const body = document.createElement('div');
+        body.className = 'text-xs space-y-1';
+        appendMultilineText(body, msg.message);
+
+        bubble.appendChild(meta);
+        bubble.appendChild(body);
+        row.appendChild(avatar);
+        row.appendChild(bubble);
+        return row;
+      }
+
+      if (msg.sender_type === 'staff') {
+        const row = document.createElement('div');
+        row.className = 'flex items-start gap-3 max-w-[88%]';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'w-9 h-9 rounded-2xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-200 dark:border-purple-900 shadow-sm mt-0.5';
+        avatar.appendChild(makeIcon('user-check', 'w-5 h-5'));
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bg-purple-50/50 dark:bg-purple-950/20 p-4 rounded-3xl rounded-tl-sm border border-purple-200 dark:border-purple-900 text-sm text-gray-800 dark:text-gray-200 leading-relaxed shadow-sm';
+
+        const meta = document.createElement('div');
+        meta.className = 'flex items-center gap-2 mb-1';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'font-bold text-xs text-purple-700 dark:text-purple-300';
+        nameEl.textContent = msg.sender_name || 'Teknisi PuTI';
+        const badgeEl = document.createElement('span');
+        badgeEl.className = 'text-[9px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 font-semibold';
+        badgeEl.textContent = 'Teknisi PuTI';
+        const timeEl = document.createElement('span');
+        timeEl.className = 'text-[10px] text-gray-400 ml-auto';
+        timeEl.textContent = timeHuman;
+
+        meta.appendChild(nameEl);
+        meta.appendChild(badgeEl);
+        meta.appendChild(timeEl);
+
+        const body = document.createElement('p');
+        body.className = 'text-xs text-gray-700 dark:text-gray-300 leading-relaxed';
+        appendMultilineText(body, msg.message);
+
+        bubble.appendChild(meta);
+        bubble.appendChild(body);
+
+        if (isSafeUrl(msg.attachment_url)) {
+          bubble.appendChild(buildAttachmentBlock(
+            msg.attachment_url,
+            'border-purple-100 dark:border-purple-900/60',
+            'inline-flex items-center gap-1.5 text-xs text-purple-600 dark:text-purple-400 hover:underline',
+            'Lihat Lampiran'
+          ));
+        }
+
+        row.appendChild(avatar);
+        row.appendChild(bubble);
+        return row;
+      }
+
+      const row = document.createElement('div');
+      row.className = 'flex items-start justify-end gap-3 max-w-[88%] ml-auto';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bg-telkom-600 text-white p-4 rounded-3xl rounded-tr-sm text-sm leading-relaxed shadow-md';
+
+      const meta = document.createElement('div');
+      meta.className = 'flex items-center justify-between gap-4 mb-1 text-telkom-100 text-[10px]';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'font-bold';
+      nameEl.textContent = msg.sender_name || 'Pelapor';
+      const timeEl = document.createElement('span');
+      timeEl.textContent = timeHuman;
+      meta.appendChild(nameEl);
+      meta.appendChild(timeEl);
+
+      const body = document.createElement('p');
+      body.className = 'text-xs text-white leading-relaxed';
+      appendMultilineText(body, msg.message);
+
+      bubble.appendChild(meta);
+      bubble.appendChild(body);
+
+      if (isSafeUrl(msg.attachment_url)) {
+        bubble.appendChild(buildAttachmentBlock(
+          msg.attachment_url,
+          'border-telkom-500',
+          'inline-flex items-center gap-1.5 text-xs text-telkom-100 hover:text-white underline',
+          'Unduh Lampiran'
+        ));
+      }
+
+      const avatar = document.createElement('div');
+      avatar.className = 'w-9 h-9 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-300 shrink-0 mt-0.5';
+      avatar.appendChild(makeIcon('user', 'w-5 h-5'));
+
+      row.appendChild(bubble);
+      row.appendChild(avatar);
+      return row;
+    }
+
+    window.SimassRealtime.subscribeTicket(ticketId, {
+      isStaff,
+      onMessage(msg) {
+        if (!msg || !threadContainer) return;
+        if (msg.id && renderedMessageIds.has(msg.id)) return;
+        if (msg.id) renderedMessageIds.add(msg.id);
+
+        const node = buildMessageElement(msg);
+        if (!node) return;
+
+        threadContainer.appendChild(node);
+        currentMessageCount += 1;
+        if (countEl) {
+          countEl.textContent = `${currentMessageCount} aktivitas`;
+        }
+        if (window.createIcons) window.createIcons();
+        node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      },
+      onStatusUpdated(e) {
+        if (!e) return;
+        if (statusBadge && e.status) {
+          const style = badgeStyles[e.status.color] || badgeStyles.gray;
+          statusBadge.className = `inline-flex items-center px-2.5 py-1 rounded-full font-bold border ${style}`;
+          statusBadge.textContent = e.status.label || e.status.value || '';
+        }
+        if (assigneeNameEl) {
+          assigneeNameEl.textContent = e.assignee_name || 'Belum Ditugaskan';
+        }
+        if (typeof window.showToast === 'function' && e.status?.label) {
+          window.showToast(`Status tiket diperbarui menjadi ${e.status.label}`, 'info', 4000);
+        }
+      },
+    });
+
+    const currentUserId = @js(auth()->id());
+    const currentUserName = @js(auth()->user()?->name ?? 'Pengguna');
+    const presenceBar = document.getElementById('ticketPresenceBar');
+    const presenceChips = document.getElementById('ticketPresenceChips');
+    const collisionWarning = document.getElementById('ticketStaffCollisionWarning');
+    const typingIndicator = document.getElementById('ticketTypingIndicator');
+    const typingText = document.getElementById('ticketTypingText');
+    let typingHideTimer = null;
+
+    const presenceHandle = window.SimassRealtime.joinTicketPresence(ticketId, {
+      onMembersChanged(members) {
+        if (!presenceBar || !presenceChips) return;
+        const others = (members || []).filter((m) => String(m.id) !== String(currentUserId));
+        presenceChips.replaceChildren();
+
+        if (others.length === 0) {
+          presenceBar.classList.add('hidden');
+          if (collisionWarning) collisionWarning.classList.add('hidden');
+          return;
+        }
+
+        presenceBar.classList.remove('hidden');
+        let otherStaffPresent = false;
+
+        others.forEach((member) => {
+          if (member.is_staff) otherStaffPresent = true;
+          const chip = document.createElement('span');
+          chip.className = member.is_staff
+            ? 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+            : 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800';
+          chip.textContent = member.is_staff ? `${member.name} (Staf)` : `${member.name} (Pelapor)`;
+          presenceChips.appendChild(chip);
+        });
+
+        if (collisionWarning) {
+          collisionWarning.classList.toggle('hidden', !(isStaff && otherStaffPresent));
+          if (isStaff && otherStaffPresent && window.createIcons) {
+            window.createIcons();
+          }
+        }
+      },
+      onTyping(payload) {
+        if (!typingIndicator || !typingText || !payload?.name) return;
+        typingText.textContent = `${payload.name} sedang mengetik...`;
+        typingIndicator.classList.remove('hidden');
+        clearTimeout(typingHideTimer);
+        typingHideTimer = setTimeout(() => {
+          typingIndicator.classList.add('hidden');
+        }, 3000);
+      },
+    });
+
+    const replyInput = document.getElementById('message');
+    const internalCheckbox = document.querySelector('input[name="is_internal"]');
+    if (replyInput) {
+      replyInput.addEventListener('input', () => {
+        // Never leak typing indicator to public presence channel when composing a private internal note
+        if (internalCheckbox && internalCheckbox.checked) return;
+        if (replyInput.value.trim().length > 0) {
+          presenceHandle.sendTyping(currentUserName);
+        }
+      });
+    }
+  });
+</script>
+@endpush
 
 @endsection

@@ -2,6 +2,16 @@
 
 namespace App\Providers;
 
+use App\Models\AuditLog;
+use App\Models\InventoryItem;
+use App\Models\Presence;
+use App\Models\Ticket;
+use App\Models\TicketMessage;
+use App\Observers\AuditLogObserver;
+use App\Observers\InventoryItemObserver;
+use App\Observers\PresenceObserver;
+use App\Observers\TicketMessageObserver;
+use App\Observers\TicketObserver;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -21,6 +31,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Ticket::observe(TicketObserver::class);
+        TicketMessage::observe(TicketMessageObserver::class);
+        Presence::observe(PresenceObserver::class);
+        InventoryItem::observe(InventoryItemObserver::class);
+        AuditLog::observe(AuditLogObserver::class);
+
         Gate::before(function ($user, string $ability) {
             if ($user->hasRole('super-admin')) {
                 return true;
