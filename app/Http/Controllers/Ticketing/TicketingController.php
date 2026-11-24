@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -137,68 +138,101 @@ class TicketingController extends Controller
             $slaDueAt = $now->copy()->addHours($hours);
         }
 
-        // 4. Create Ticket Record
-        $ticket = Ticket::create([
-            'ticket_number' => Ticket::generateTicketNumber(),
-            'user_id' => Auth::id(),
-            'inventory_item_id' => $linkedItem?->id,
-            'assigned_to' => $assignedTo,
-            'category' => $validated['category'],
-            'service_item' => $validated['service_item'],
-            'authority' => $authority,
-            'scope' => $scope,
-            'status' => $status,
-            'priority' => $validated['priority'],
-            'location' => $resolvedLocation,
-            'title' => $validated['title'],
-            'description' => $validated['description'],
-            'attachment' => $attachmentPath,
-            'source_channel' => 'web',
-            'sla_due_at' => $slaDueAt,
-            'sla_paused_at' => $slaPausedAt,
-        ]);
+        // Short-window duplicate protection for double-tapped web submissions (15 seconds)
+        $recentDuplicate = Ticket::where('user_id', Auth::id())
+            ->where('source_channel', 'web')
+            ->where('title', trim($validated['title']))
+            ->where('description', trim($validated['description']))
+            ->where('created_at', '>=', now()->subSeconds(15))
+            ->latest()
+            ->first();
 
-        if ($linkedItem) {
-            $this->inventorySync->syncFromTicket($ticket, $this->currentUser());
+        if ($recentDuplicate) {
+            return redirect()->route('ticket.show', $recentDuplicate)
+                ->with('success', "Tiket {$recentDuplicate->ticket_number} sudah tercatat.");
         }
 
-        // 5. Initial User Message
-        TicketMessage::create([
-            'ticket_id' => $ticket->id,
-            'user_id' => Auth::id(),
-            'sender_type' => 'user',
-            'message' => $validated['description'],
-            'attachment' => $attachmentPath,
-        ]);
+        // 4. Create Ticket Record, Initial Message & SLA Logs Atomically
+        $currentUser = $this->currentUser();
+        $ticket = DB::transaction(function () use (
+            $linkedItem,
+            $assignedTo,
+            $validated,
+            $authority,
+            $scope,
+            $status,
+            $resolvedLocation,
+            $attachmentPath,
+            $slaDueAt,
+            $slaPausedAt,
+            $ambiguityMsg,
+            $now,
+            $currentUser,
+        ): Ticket {
+            $ticket = Ticket::create([
+                'ticket_number' => Ticket::generateTicketNumber(),
+                'user_id' => Auth::id(),
+                'inventory_item_id' => $linkedItem?->id,
+                'assigned_to' => $assignedTo,
+                'category' => $validated['category'],
+                'service_item' => $validated['service_item'],
+                'authority' => $authority,
+                'scope' => $scope,
+                'status' => $status,
+                'priority' => $validated['priority'],
+                'location' => $resolvedLocation,
+                'title' => $validated['title'],
+                'description' => $validated['description'],
+                'attachment' => $attachmentPath,
+                'source_channel' => 'web',
+                'sla_due_at' => $slaDueAt,
+                'sla_paused_at' => $slaPausedAt,
+            ]);
 
-        // 6. Automated Luna Responses & SLA Logs
-        if ($authority === 'central') {
+            if ($linkedItem) {
+                $this->inventorySync->syncFromTicket($ticket, $currentUser);
+            }
+
+            // 5. Initial User Message
             TicketMessage::create([
                 'ticket_id' => $ticket->id,
-                'user_id' => null,
-                'sender_type' => 'ai_luna',
-                'message' => "Halo! Saya **Luna AI** dari PuTI Surabaya. Laporan Anda telah kami terima dan tercatat dengan nomor **{$ticket->ticket_number}**.\n\nKarena layanan **{$ticket->service_item}** memerlukan sinkronisasi pada sistem terpusat, tim PuTI Surabaya sedang mengawal dan mengoordinasikan laporan Anda bersama tim sistem terpusat Telkom University. Perkembangan penanganan akan kami informasikan langsung di thread ini. 😊",
+                'user_id' => Auth::id(),
+                'sender_type' => 'user',
+                'message' => $validated['description'],
+                'attachment' => $attachmentPath,
             ]);
 
-            TicketSlaLog::create([
-                'ticket_id' => $ticket->id,
-                'paused_at' => $now,
-                'reason' => 'Koordinasi Sistem Terpusat',
-            ]);
-        } elseif ($ambiguityMsg !== null) {
-            TicketMessage::create([
-                'ticket_id' => $ticket->id,
-                'user_id' => null,
-                'sender_type' => 'ai_luna',
-                'message' => $ambiguityMsg,
-            ]);
+            // 6. Automated Luna Responses & SLA Logs
+            if ($authority === 'central') {
+                TicketMessage::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => null,
+                    'sender_type' => 'ai_luna',
+                    'message' => "Halo! Saya **Luna AI** dari PuTI Surabaya. Laporan Anda telah kami terima dan tercatat dengan nomor **{$ticket->ticket_number}**.\n\nKarena layanan **{$ticket->service_item}** memerlukan sinkronisasi pada sistem terpusat, tim PuTI Surabaya sedang mengawal dan mengoordinasikan laporan Anda bersama tim sistem terpusat Telkom University. Perkembangan penanganan akan kami informasikan langsung di thread ini. 😊",
+                ]);
 
-            TicketSlaLog::create([
-                'ticket_id' => $ticket->id,
-                'paused_at' => $now,
-                'reason' => 'Menunggu Tanggapan Pelapor (Klarifikasi Informasi Kendala)',
-            ]);
-        }
+                TicketSlaLog::create([
+                    'ticket_id' => $ticket->id,
+                    'paused_at' => $now,
+                    'reason' => 'Koordinasi Sistem Terpusat',
+                ]);
+            } elseif ($ambiguityMsg !== null) {
+                TicketMessage::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => null,
+                    'sender_type' => 'ai_luna',
+                    'message' => $ambiguityMsg,
+                ]);
+
+                TicketSlaLog::create([
+                    'ticket_id' => $ticket->id,
+                    'paused_at' => $now,
+                    'reason' => 'Menunggu Tanggapan Pelapor (Klarifikasi Informasi Kendala)',
+                ]);
+            }
+
+            return $ticket;
+        });
 
         return redirect()->route('ticket.show', $ticket)
             ->with('success', "Tiket {$ticket->ticket_number} berhasil dibuat!");

@@ -35,7 +35,7 @@
 
                 <!-- Dropdown Menu -->
                 <div id="langDropdownMenu"
-                    class="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl shadow-xl py-1.5 hidden opacity-0 scale-95 transition-all duration-200 z-50">
+                    class="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl shadow-xl py-1.5 hidden opacity-0 scale-[0.97] transition duration-150 ease-out origin-top-right z-50">
                     <button
                         onclick="changeLang('id', 'https://flagcdn.com/w20/id.png', 'https://flagcdn.com/w40/id.png 2x', 'ID')"
                         class="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition font-semibold text-left">
@@ -114,7 +114,7 @@
             if (dropdown.classList.contains('hidden')) {
                 dropdown.classList.remove('hidden');
                 void dropdown.offsetWidth;
-                dropdown.classList.remove('opacity-0', 'scale-95');
+                dropdown.classList.remove('opacity-0', 'scale-[0.97]');
             } else {
                 hideLangDropdown();
             }
@@ -122,10 +122,10 @@
 
         function hideLangDropdown() {
             const dropdown = document.getElementById('langDropdownMenu');
-            dropdown.classList.add('opacity-0', 'scale-95');
+            dropdown.classList.add('opacity-0', 'scale-[0.97]');
             setTimeout(() => {
                 dropdown.classList.add('hidden');
-            }, 200);
+            }, 150);
         }
 
         function changeLang(lang, flagSrc, flagSrcset, label) {

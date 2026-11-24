@@ -126,20 +126,20 @@
                 <td class="px-5 py-3.5 text-center">
                   <div class="flex items-center justify-center gap-1.5">
                     @if(!$d['is_lengkap'] && Auth::id() === $d['user_id'] && !empty($d['raw_cout']))
-                      <x-button type="button" variant="table-amber" onclick="openLengkapiModal({{ $d['id'] }}, '{{ $d['raw_cin'] }}', '{{ $d['raw_cout'] }}', '{{ addslashes($d['raw_pekerjaan'] ?? '') }}')" title="Lengkapi Presensi">Lengkapi</x-button>
+                      <x-button type="button" variant="table-amber" onclick="openLengkapiModal(@js($d['id']), @js($d['raw_cin']), @js($d['raw_cout']), @js($d['raw_pekerjaan'] ?? ''))" title="Lengkapi Presensi">Lengkapi</x-button>
                     @endif
                     <x-button type="button" variant="table" icon="eye"
-                      onclick="openProofModal('{{ addslashes($d['nama'] ?? '') }}', '{{ $d['tgl'] }}', '{{ $d['cin'] }}', '{{ addslashes($d['pekerjaan'] ?? '') }}', '{{ $d['foto'] ?? '' }}')"
+                      onclick="openProofModal(@js($d['nama'] ?? ''), @js($d['tgl']), @js($d['cin']), @js($d['pekerjaan'] ?? ''), @js($d['foto'] ?? ''))"
                       title="Lihat Bukti">
                       Bukti
                     </x-button>
                     @if(Auth::id() === $d['user_id'] || Auth::user()->can('manage-presence'))
                     <x-button type="button" variant="table-blue" icon="pencil"
-                      onclick="openEditModal({{ $d['id'] }}, '{{ $d['raw_cin'] }}', '{{ $d['raw_cout'] }}', '{{ addslashes($d['pekerjaan'] ?? '') }}')" title="Edit">
+                      onclick="openEditModal(@js($d['id']), @js($d['raw_cin']), @js($d['raw_cout']), @js($d['pekerjaan'] ?? ''))" title="Edit">
                       Edit
                     </x-button>
                     <x-button type="button" variant="table-danger" icon="trash-2"
-                      onclick="confirmDelete({{ $d['id'] }})" title="Hapus">
+                      onclick="confirmDelete(@js($d['id']))" title="Hapus">
                       Hapus
                     </x-button>
                     @endif
@@ -182,14 +182,14 @@
             <!-- Action buttons row -->
             <div class="flex flex-wrap items-center justify-end gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-gray-800/80">
               <button type="button"
-                onclick="openProofModal('{{ addslashes($d['nama'] ?? '') }}', '{{ $d['tgl'] }}', '{{ $d['cin'] }}', '{{ addslashes($d['pekerjaan'] ?? '') }}', '{{ $d['foto'] ?? '' }}')"
+                onclick="openProofModal(@js($d['nama'] ?? ''), @js($d['tgl']), @js($d['cin']), @js($d['pekerjaan'] ?? ''), @js($d['foto'] ?? ''))"
                 class="flex items-center justify-center p-2 text-gray-500 hover:text-telkom-600 bg-gray-50 hover:bg-telkom-50 dark:bg-gray-850 dark:hover:bg-telkom-950/20 rounded-xl transition"
                 title="Lihat Bukti">
                 <i data-lucide="eye" class="w-4 h-4"></i>
               </button>
               @if(!$d['is_lengkap'] && Auth::id() === $d['user_id'] && !empty($d['raw_cout']))
               <button type="button"
-                onclick="openLengkapiModal({{ $d['id'] }}, '{{ $d['raw_cin'] }}', '{{ $d['raw_cout'] }}', '{{ addslashes($d['raw_pekerjaan'] ?? '') }}')"
+                onclick="openLengkapiModal(@js($d['id']), @js($d['raw_cin']), @js($d['raw_cout']), @js($d['raw_pekerjaan'] ?? ''))"
                 class="flex items-center justify-center p-2 text-amber-600 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 dark:hover:bg-amber-900/40 rounded-xl transition"
                 title="Lengkapi">
                 <i data-lucide="pencil" class="w-4 h-4"></i>
@@ -197,13 +197,13 @@
               @endif
               @if(Auth::id() === $d['user_id'] || Auth::user()->can('manage-presence'))
               <button type="button"
-                onclick="openEditModal({{ $d['id'] }}, '{{ $d['raw_cin'] }}', '{{ $d['raw_cout'] }}', '{{ addslashes($d['pekerjaan'] ?? '') }}')"
+                onclick="openEditModal(@js($d['id']), @js($d['raw_cin']), @js($d['raw_cout']), @js($d['pekerjaan'] ?? ''))"
                 class="flex items-center justify-center p-2 text-gray-500 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 dark:bg-gray-850 dark:hover:bg-blue-950/20 rounded-xl transition"
                 title="Edit">
                 <i data-lucide="pencil" class="w-4 h-4"></i>
               </button>
               <button type="button"
-                onclick="confirmDelete({{ $d['id'] }})"
+                onclick="confirmDelete(@js($d['id']))"
                 class="flex items-center justify-center p-2 text-gray-500 hover:text-red-600 bg-gray-50 hover:bg-red-50 dark:bg-gray-850 dark:hover:bg-red-950/20 rounded-xl transition"
                 title="Hapus">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>

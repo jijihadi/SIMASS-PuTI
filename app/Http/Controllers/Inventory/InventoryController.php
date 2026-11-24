@@ -248,7 +248,7 @@ class InventoryController extends Controller
     public function importExcel(Request $request, InventoryImportService $importer): RedirectResponse
     {
         $request->validate([
-            'file' => ['required', 'file', 'max:10240'],
+            'file' => ['required', 'file', 'mimes:xlsx,csv,txt', 'max:10240'],
         ]);
 
         $file = $request->file('file');

@@ -175,18 +175,18 @@
                                         @endif
 
                                         <x-button variant="table" icon="edit-3"
-                                            @click="openEdit({
-                                                id: {{ $user->id }},
-                                                name: '{{ addslashes($user->name) }}',
-                                                username: '{{ addslashes($user->username) }}',
-                                                email: '{{ addslashes($user->email ?? '') }}',
-                                                nim: '{{ addslashes($user->nim ?? '') }}',
-                                                phone: '{{ addslashes($user->phone ?? '') }}',
-                                                type: '{{ addslashes($user->type ?? 'Staff') }}',
-                                                position: '{{ addslashes($user->position ?? '') }}',
-                                                unit_id: '{{ $user->unit_id ?? '' }}',
-                                                role: '{{ $user->roles->first()?->name ?? 'staff' }}'
-                                            })" title="Edit Pengguna">
+                                            @click="openEdit(@js([
+                                                'id' => $user->id,
+                                                'name' => $user->name,
+                                                'username' => $user->username,
+                                                'email' => $user->email ?? '',
+                                                'nim' => $user->nim ?? '',
+                                                'phone' => $user->phone ?? '',
+                                                'type' => $user->type ?? 'Staff',
+                                                'position' => $user->position ?? '',
+                                                'unit_id' => $user->unit_id ?? '',
+                                                'role' => $user->roles->first()?->name ?? 'staff',
+                                            ]))" title="Edit Pengguna">
                                             Edit
                                         </x-button>
 

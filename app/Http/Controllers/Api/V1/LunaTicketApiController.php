@@ -18,6 +18,7 @@ use App\Services\LunaAiService;
 use App\Services\TicketAssignmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -264,71 +265,96 @@ class LunaTicketApiController extends Controller
             $slaDueAt = $now->copy()->addHours((int) $hours);
         }
 
-        $ticket = Ticket::create([
-            'ticket_number' => Ticket::generateTicketNumber(),
-            'user_id' => $reporter->id,
-            'inventory_item_id' => $linkedItem?->id,
-            'assigned_to' => $assignedTo,
-            'category' => $category,
-            'service_item' => $serviceItem,
-            'authority' => $authority,
-            'scope' => $scope,
-            'status' => $status,
-            'priority' => $priority,
-            'location' => $location,
-            'title' => $title,
-            'description' => $trimmedDescription,
-            'source_channel' => 'whatsapp_luna',
-            'reporter_phone' => $normalizedPhone,
-            'reporter_name' => $validated['reporter_name'] ?? $reporter->name,
-            'sla_due_at' => $slaDueAt,
-            'sla_paused_at' => $slaPausedAt,
-        ]);
-
-        TicketMessage::create([
-            'ticket_id' => $ticket->id,
-            'user_id' => $reporter->id,
-            'sender_type' => 'user',
-            'message' => $trimmedDescription,
-        ]);
-
-        $lunaReply = "Halo! Laporan Anda melalui WhatsApp telah diterima oleh **Luna AI PuTI Surabaya** dengan nomor tiket **{$ticket->ticket_number}** (Status: **{$ticket->user_status_label}**).";
-
-        if ($authority === 'central') {
-            $lunaReply = "Halo! Saya **Luna AI** dari PuTI Surabaya. Laporan Anda telah kami terima dan tercatat dengan nomor **{$ticket->ticket_number}**.\n\nKarena layanan **{$ticket->service_item}** memerlukan sinkronisasi pada sistem terpusat, tim PuTI Surabaya sedang mengawal dan mengoordinasikan laporan Anda bersama tim sistem terpusat Telkom University. 😊";
+        $lunaReply = '';
+        $ticket = DB::transaction(function () use (
+            $reporter,
+            $linkedItem,
+            $assignedTo,
+            $category,
+            $serviceItem,
+            $authority,
+            $scope,
+            $status,
+            $priority,
+            $location,
+            $title,
+            $trimmedDescription,
+            $normalizedPhone,
+            $validated,
+            $slaDueAt,
+            $slaPausedAt,
+            $ambiguityMsg,
+            $now,
+            &$lunaReply,
+        ): Ticket {
+            $ticket = Ticket::create([
+                'ticket_number' => Ticket::generateTicketNumber(),
+                'user_id' => $reporter->id,
+                'inventory_item_id' => $linkedItem?->id,
+                'assigned_to' => $assignedTo,
+                'category' => $category,
+                'service_item' => $serviceItem,
+                'authority' => $authority,
+                'scope' => $scope,
+                'status' => $status,
+                'priority' => $priority,
+                'location' => $location,
+                'title' => $title,
+                'description' => $trimmedDescription,
+                'source_channel' => 'whatsapp_luna',
+                'reporter_phone' => $normalizedPhone,
+                'reporter_name' => $validated['reporter_name'] ?? $reporter->name,
+                'sla_due_at' => $slaDueAt,
+                'sla_paused_at' => $slaPausedAt,
+            ]);
 
             TicketMessage::create([
                 'ticket_id' => $ticket->id,
-                'user_id' => null,
-                'sender_type' => 'ai_luna',
-                'message' => $lunaReply,
+                'user_id' => $reporter->id,
+                'sender_type' => 'user',
+                'message' => $trimmedDescription,
             ]);
 
-            TicketSlaLog::create([
-                'ticket_id' => $ticket->id,
-                'paused_at' => $now,
-                'reason' => 'Koordinasi Sistem Terpusat',
-            ]);
-        } elseif ($ambiguityMsg !== null) {
-            $lunaReply = $ambiguityMsg;
+            $lunaReply = "Halo! Laporan Anda melalui WhatsApp telah diterima oleh **Luna AI PuTI Surabaya** dengan nomor tiket **{$ticket->ticket_number}** (Status: **{$ticket->user_status_label}**).";
 
-            TicketMessage::create([
-                'ticket_id' => $ticket->id,
-                'user_id' => null,
-                'sender_type' => 'ai_luna',
-                'message' => $ambiguityMsg,
-            ]);
+            if ($authority === 'central') {
+                $lunaReply = "Halo! Saya **Luna AI** dari PuTI Surabaya. Laporan Anda telah kami terima dan tercatat dengan nomor **{$ticket->ticket_number}**.\n\nKarena layanan **{$ticket->service_item}** memerlukan sinkronisasi pada sistem terpusat, tim PuTI Surabaya sedang mengawal dan mengoordinasikan laporan Anda bersama tim sistem terpusat Telkom University. 😊";
 
-            TicketSlaLog::create([
-                'ticket_id' => $ticket->id,
-                'paused_at' => $now,
-                'reason' => 'Menunggu Tanggapan Pelapor (Klarifikasi Informasi Kendala)',
-            ]);
-        }
+                TicketMessage::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => null,
+                    'sender_type' => 'ai_luna',
+                    'message' => $lunaReply,
+                ]);
 
-        if ($linkedItem) {
-            $this->inventorySync->syncFromTicket($ticket, $reporter);
-        }
+                TicketSlaLog::create([
+                    'ticket_id' => $ticket->id,
+                    'paused_at' => $now,
+                    'reason' => 'Koordinasi Sistem Terpusat',
+                ]);
+            } elseif ($ambiguityMsg !== null) {
+                $lunaReply = $ambiguityMsg;
+
+                TicketMessage::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => null,
+                    'sender_type' => 'ai_luna',
+                    'message' => $ambiguityMsg,
+                ]);
+
+                TicketSlaLog::create([
+                    'ticket_id' => $ticket->id,
+                    'paused_at' => $now,
+                    'reason' => 'Menunggu Tanggapan Pelapor (Klarifikasi Informasi Kendala)',
+                ]);
+            }
+
+            if ($linkedItem) {
+                $this->inventorySync->syncFromTicket($ticket, $reporter);
+            }
+
+            return $ticket;
+        });
 
         $ticket->load(['user', 'assignee', 'inventoryItem', 'messages.user']);
 
@@ -512,33 +538,35 @@ class LunaTicketApiController extends Controller
         $validated = $validator->validated();
 
         $now = now();
-        if ($ticket->sla_paused_at) {
-            $duration = (int) $ticket->sla_paused_at->diffInMinutes($now);
-            $activeLog = $ticket->slaLogs()->whereNull('resumed_at')->latest()->first();
-            if ($activeLog) {
-                $activeLog->update([
-                    'resumed_at' => $now,
-                    'duration_minutes' => $duration,
-                ]);
+        DB::transaction(function () use ($ticket, $validated, $now): void {
+            if ($ticket->sla_paused_at) {
+                $duration = (int) $ticket->sla_paused_at->diffInMinutes($now);
+                $activeLog = $ticket->slaLogs()->whereNull('resumed_at')->latest()->first();
+                if ($activeLog) {
+                    $activeLog->update([
+                        'resumed_at' => $now,
+                        'duration_minutes' => $duration,
+                    ]);
+                }
             }
-        }
 
-        $ticket->update([
-            'status' => TicketStatus::Canceled->value,
-            'cancel_reason' => 'user_withdrawn',
-            'status_note' => $validated['status_note'] ?? 'Dibatalkan melalui WhatsApp Luna AI.',
-            'sla_paused_at' => null,
-            'resolved_at' => $now,
-        ]);
+            $ticket->update([
+                'status' => TicketStatus::Canceled->value,
+                'cancel_reason' => 'user_withdrawn',
+                'status_note' => $validated['status_note'] ?? 'Dibatalkan melalui WhatsApp Luna AI.',
+                'sla_paused_at' => null,
+                'resolved_at' => $now,
+            ]);
 
-        $this->inventorySync->syncFromTicket($ticket, $ticket->user, $ticket->status_note);
+            $this->inventorySync->syncFromTicket($ticket, $ticket->user, $ticket->status_note);
 
-        TicketMessage::create([
-            'ticket_id' => $ticket->id,
-            'user_id' => $ticket->user_id,
-            'sender_type' => 'system',
-            'message' => '🚫 **Tiket Dibatalkan (WhatsApp):** Tiket dibatalkan melalui Luna AI WhatsApp.',
-        ]);
+            TicketMessage::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $ticket->user_id,
+                'sender_type' => 'system',
+                'message' => '🚫 **Tiket Dibatalkan (WhatsApp):** Tiket dibatalkan melalui Luna AI WhatsApp.',
+            ]);
+        });
 
         $ticket->load(['user', 'assignee', 'inventoryItem', 'messages.user']);
 

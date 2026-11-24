@@ -151,9 +151,9 @@
         <label for="attachment" class="block text-sm font-bold text-gray-900 dark:text-gray-200 mb-1.5">
           Lampiran Foto / Tangkapan Layar (Opsional)
         </label>
-        <input type="file" name="attachment" id="attachment" accept=".jpg,.jpeg,.png,.webp,.pdf"
+        <input type="file" name="attachment" id="attachment" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
           class="w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 dark:file:bg-gray-800 dark:file:text-gray-300 transition">
-        <p class="text-xs text-gray-400 mt-1">Format: JPG, PNG, WEBP, atau PDF. Maksimal ukuran 5 MB.</p>
+        <p class="text-xs text-gray-400 mt-1">Format: JPG, PNG, WEBP, HEIC/HEIF, atau PDF. Maksimal ukuran 10 MB.</p>
       </div>
 
       <!-- Submit Button -->
