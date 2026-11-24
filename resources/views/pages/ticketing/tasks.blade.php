@@ -25,10 +25,52 @@
         <span id="soundLabel">Audio: Aktif</span>
       </button>
 
-      <button type="button" onclick="testAudio()" class="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-2xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-750 text-gray-700 dark:text-gray-300 text-xs font-semibold transition">
-        <i data-lucide="play" class="w-3.5 h-3.5"></i>
-        <span>Tes Suara</span>
-      </button>
+      <div class="relative" id="testSoundDropdownContainer">
+        <button type="button" id="btnTestSoundMenu" onclick="toggleTestSoundMenu(event)"
+          class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold active:scale-[0.98] transition duration-150">
+          <i data-lucide="play" class="w-3.5 h-3.5"></i>
+          <span>Tes Suara</span>
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5 opacity-70"></i>
+        </button>
+
+        <div id="testSoundMenu"
+          class="hidden opacity-0 scale-[0.97] transition duration-150 ease-out origin-top-right absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-xl z-50 p-1.5 space-y-0.5 text-xs">
+          <div class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+            Pilih Kasus Uji Suara
+          </div>
+          <button type="button" onclick="testAudio('ticket')"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+            <span class="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+            <span class="font-semibold">Tiket Baru Masuk</span>
+          </button>
+          <button type="button" onclick="testAudio('urgent')"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+            <span class="w-2 h-2 rounded-full bg-orange-500 shrink-0"></span>
+            <span class="font-semibold">Tiket Mendesak (Urgent)</span>
+          </button>
+          <button type="button" onclick="testAudio('status')"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+            <span class="w-2 h-2 rounded-full bg-purple-500 shrink-0"></span>
+            <span class="font-semibold">Tiket Dikerjakan / Update</span>
+          </button>
+          <div class="my-1 border-t border-gray-100 dark:border-gray-800"></div>
+          <button type="button" onclick="testAudio('outage')"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">
+            <span class="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
+            <span class="font-semibold">NING: Outage Kritis</span>
+          </button>
+          <button type="button" onclick="testAudio('latency')"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition">
+            <span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+            <span class="font-semibold">NING: Latensi Tinggi</span>
+          </button>
+          <button type="button" onclick="testAudio('restored')"
+            class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+            <span class="font-semibold">NING: Perangkat Pulih</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -175,19 +217,19 @@
   });
   updateSoundUI();
 
-  // Synthetic Melodic Chime using Browser Web Audio API (Zero external file dependency!)
-  function playChime() {
+  // Synthetic Melodic Chimes per Alert Case using Browser Web Audio API (Zero external file dependency!)
+  function playChime(type = 'ticket') {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
 
-      const playTone = (freq, start, duration) => {
+      const playTone = (freq, start, duration, wave = 'sine', volume = 0.15) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine';
+        osc.type = wave;
         osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
-        gain.gain.setValueAtTime(0.15, ctx.currentTime + start);
+        gain.gain.setValueAtTime(volume, ctx.currentTime + start);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
         osc.connect(gain);
         gain.connect(ctx.destination);
@@ -195,9 +237,31 @@
         osc.stop(ctx.currentTime + start + duration);
       };
 
-      // 2-tone melodic chime: C6 (1046Hz) then E6 (1318Hz)
-      playTone(1046.50, 0, 0.35);
-      playTone(1318.51, 0.20, 0.50);
+      if (type === 'urgent') {
+        playTone(880.00, 0, 0.18, 'triangle', 0.18);
+        playTone(1174.66, 0.16, 0.18, 'triangle', 0.18);
+        playTone(1760.00, 0.32, 0.40, 'triangle', 0.20);
+      } else if (type === 'outage') {
+        playTone(880.00, 0, 0.18, 'sawtooth', 0.12);
+        playTone(659.25, 0.18, 0.18, 'sawtooth', 0.12);
+        playTone(880.00, 0.38, 0.18, 'sawtooth', 0.12);
+        playTone(659.25, 0.56, 0.28, 'sawtooth', 0.12);
+      } else if (type === 'latency') {
+        playTone(587.33, 0, 0.20, 'triangle', 0.16);
+        playTone(587.33, 0.24, 0.28, 'triangle', 0.16);
+      } else if (type === 'restored') {
+        playTone(523.25, 0, 0.18, 'sine', 0.14);
+        playTone(659.25, 0.14, 0.18, 'sine', 0.14);
+        playTone(783.99, 0.28, 0.18, 'sine', 0.14);
+        playTone(1046.50, 0.42, 0.40, 'sine', 0.16);
+      } else if (type === 'status') {
+        playTone(783.99, 0, 0.18, 'sine', 0.12);
+        playTone(1046.50, 0.16, 0.30, 'sine', 0.12);
+      } else {
+        // Default 2-tone melodic chime: C6 (1046Hz) then E6 (1318Hz)
+        playTone(1046.50, 0, 0.35, 'sine', 0.15);
+        playTone(1318.51, 0.20, 0.50, 'sine', 0.15);
+      }
     } catch (e) {
       console.warn('AudioContext not allowed or not supported', e);
     }
@@ -215,12 +279,83 @@
     }
   }
 
-  // Test Audio Handler
-  window.testAudio = function() {
-    playChime();
+  function hideTestSoundMenu() {
+    const menu = document.getElementById('testSoundMenu');
+    if (!menu || menu.classList.contains('hidden')) return;
+    menu.classList.add('opacity-0', 'scale-[0.97]');
+    setTimeout(() => menu.classList.add('hidden'), 150);
+  }
+
+  window.toggleTestSoundMenu = function(event) {
+    event.stopPropagation();
+    const menu = document.getElementById('testSoundMenu');
+    if (!menu) return;
+    if (menu.classList.contains('hidden')) {
+      menu.classList.remove('hidden');
+      void menu.offsetWidth;
+      menu.classList.remove('opacity-0', 'scale-[0.97]');
+    } else {
+      hideTestSoundMenu();
+    }
+  };
+
+  document.addEventListener('click', (event) => {
+    const container = document.getElementById('testSoundDropdownContainer');
+    if (container && !container.contains(event.target)) {
+      hideTestSoundMenu();
+    }
+  });
+
+  // Test Audio Handler per Case
+  window.testAudio = function(caseType = 'ticket') {
+    hideTestSoundMenu();
+    const scripts = {
+      ticket: {
+        delay: 450,
+        text: 'Tiket baru masuk. Layanan Wi-Fi Kampus. Koneksi terputus di Gedung A lantai 2.',
+        toast: 'Tes suara: Tiket Baru Masuk',
+        toastType: 'info',
+      },
+      urgent: {
+        delay: 550,
+        text: 'Perhatian! Tiket prioritas mendesak masuk. Layanan Jaringan Kabel LAN. Switch utama lantai 3 mati total.',
+        toast: 'Tes suara: Tiket Mendesak (Urgent)',
+        toastType: 'warning',
+      },
+      status: {
+        delay: 400,
+        text: 'Pembaruan tiket. Tiket sedang dikerjakan oleh teknisi PuTI Surabaya.',
+        toast: 'Tes suara: Tiket Dikerjakan / Update',
+        toastType: 'info',
+      },
+      outage: {
+        delay: 750,
+        text: 'Peringatan kritis jaringan NING. Gangguan jaringan terdeteksi pada perangkat Switch Core Gedung A.',
+        toast: 'Tes suara: NING Outage Kritis',
+        toastType: 'error',
+      },
+      latency: {
+        delay: 500,
+        text: 'Peringatan jaringan NING. Latensi tinggi terdeteksi pada Access Point Perpustakaan lantai 2.',
+        toast: 'Tes suara: NING Latensi Tinggi',
+        toastType: 'warning',
+      },
+      restored: {
+        delay: 650,
+        text: 'Informasi jaringan NING. Perangkat Switch Core Gedung A telah kembali pulih dan normal.',
+        toast: 'Tes suara: NING Perangkat Pulih',
+        toastType: 'success',
+      },
+    };
+
+    const selected = scripts[caseType] || scripts.ticket;
+    playChime(caseType);
+    if (typeof window.showToast === 'function') {
+      window.showToast(selected.toast, selected.toastType, 3000);
+    }
     setTimeout(() => {
-      speakAnnouncement("Notifikasi sistem: Audio alert NOC PuTI Surabaya berfungsi dengan baik.");
-    }, 450);
+      speakAnnouncement(selected.text);
+    }, selected.delay);
   };
 
   // Background Polling for New Tickets (Every 15 Seconds)

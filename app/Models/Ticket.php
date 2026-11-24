@@ -76,6 +76,21 @@ class Ticket extends Model
         'resolved_at' => 'datetime',
     ];
 
+    protected static function booted(): void
+    {
+        static::created(function (self $ticket): void {
+            if ($ticket->inventory_item_id) {
+                $ticket->inventoryItems()->syncWithoutDetaching([$ticket->inventory_item_id]);
+            }
+        });
+
+        static::updated(function (self $ticket): void {
+            if ($ticket->wasChanged('inventory_item_id') && $ticket->inventory_item_id) {
+                $ticket->inventoryItems()->syncWithoutDetaching([$ticket->inventory_item_id]);
+            }
+        });
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');

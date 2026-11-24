@@ -86,7 +86,15 @@
           minimumResultsForSearch: enableSearch ? 0 : Infinity,
           width: '100%',
           dropdownParent: parent,
-          placeholder: $el.attr('placeholder') || undefined
+          closeOnSelect: !$el.prop('multiple'),
+          placeholder: $el.attr('placeholder') || undefined,
+          templateSelection: function(data) {
+            if (!data.id || !data.element) {
+              return data.text;
+            }
+            const shortLabel = data.element.getAttribute('data-selection-label');
+            return shortLabel || data.text;
+          }
         });
 
         // Trigger native events so Alpine x-model updates
