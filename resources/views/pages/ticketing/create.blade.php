@@ -106,19 +106,25 @@
         </div>
 
         <div>
-          <label for="inventory_item_id" class="block text-sm font-bold text-gray-900 dark:text-gray-200 mb-1.5">
-            Tautkan Aset Inventaris (Opsional)
+          <label for="inventory_item_ids" class="block text-sm font-bold text-gray-900 dark:text-gray-200 mb-1.5">
+            Tautkan Aset Inventaris (Opsional, bisa &gt; 1 aset)
           </label>
-          <select name="inventory_item_id" id="inventory_item_id"
+          @php
+            $oldAssetIds = array_map('strval', (array) old('inventory_item_ids', []));
+          @endphp
+          <select name="inventory_item_ids[]" id="inventory_item_ids" multiple
+            placeholder="Pilih satu atau lebih aset inventaris..."
             class="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-telkom-500 transition">
-            <option value="">-- Tidak Terkait Aset Tertentu --</option>
             @foreach($inventoryItems ?? [] as $asset)
-              <option value="{{ $asset->id }}" {{ (string) old('inventory_item_id') === (string) $asset->id ? 'selected' : '' }}>
-                {{ $asset->asset_code }} — {{ $asset->name }} ({{ $asset->display_location }})
+              <option value="{{ $asset->id }}"
+                data-selection-label="{{ $asset->asset_code }}"
+                title="{{ $asset->asset_code }} — {{ $asset->name }} ({{ $asset->condition_label }})"
+                {{ in_array((string) $asset->id, $oldAssetIds, true) ? 'selected' : '' }}>
+                {{ $asset->asset_code }} — {{ $asset->name }} ({{ $asset->condition_label }})
               </option>
             @endforeach
           </select>
-          <p class="text-xs text-gray-500 mt-1">Otomatis menyinkronkan kondisi aset di Inventaris.</p>
+          <p class="text-xs text-gray-500 mt-1">1 tiket dapat menautkan beberapa aset sekaligus untuk sinkronisasi otomatis.</p>
         </div>
 
         <div>

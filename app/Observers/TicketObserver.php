@@ -13,6 +13,10 @@ class TicketObserver
      */
     public function created(Ticket $ticket): void
     {
+        if ($ticket->inventory_item_id) {
+            $ticket->inventoryItems()->syncWithoutDetaching([$ticket->inventory_item_id]);
+        }
+
         TicketCreated::dispatch($ticket);
     }
 
@@ -21,6 +25,10 @@ class TicketObserver
      */
     public function updated(Ticket $ticket): void
     {
+        if ($ticket->wasChanged('inventory_item_id') && $ticket->inventory_item_id) {
+            $ticket->inventoryItems()->syncWithoutDetaching([$ticket->inventory_item_id]);
+        }
+
         if ($ticket->wasChanged(['status', 'scope', 'assigned_to'])) {
             TicketStatusUpdated::dispatch($ticket);
         }

@@ -84,6 +84,8 @@ class TicketingController extends Controller
             'description' => 'required|string|min:5',
             'location' => 'nullable|string|max:255',
             'inventory_item_id' => 'nullable|exists:inventory_items,id',
+            'inventory_item_ids' => 'nullable|array',
+            'inventory_item_ids.*' => 'integer|exists:inventory_items,id',
             'priority' => 'required|in:low,medium,high,urgent',
             'attachment' => 'nullable|file|mimes:jpeg,png,jpg,webp,heic,heif,pdf|max:10240',
         ]);
@@ -93,9 +95,19 @@ class TicketingController extends Controller
             $attachmentPath = $request->file('attachment')->store('tickets/attachments', 'public');
         }
 
-        $linkedItem = ! empty($validated['inventory_item_id'])
-            ? InventoryItem::find($validated['inventory_item_id'])
-            : null;
+        $linkedItemIds = $validated['inventory_item_ids'] ?? [];
+        if (! empty($validated['inventory_item_id'])) {
+            $linkedItemIds[] = (int) $validated['inventory_item_id'];
+        }
+        $linkedItemIds = array_values(array_unique(array_filter(
+            array_map('intval', $linkedItemIds),
+            static fn (int $id): bool => $id > 0,
+        )));
+
+        $linkedItems = ! empty($linkedItemIds)
+            ? InventoryItem::whereIn('id', $linkedItemIds)->get()
+            : collect();
+        $linkedItem = $linkedItems->first();
 
         $resolvedLocation = $validated['location'] ?? ($linkedItem?->display_location !== '-' ? $linkedItem?->display_location : null);
 
@@ -156,6 +168,7 @@ class TicketingController extends Controller
         $currentUser = $this->currentUser();
         $ticket = DB::transaction(function () use (
             $linkedItem,
+            $linkedItemIds,
             $assignedTo,
             $validated,
             $authority,
@@ -189,7 +202,8 @@ class TicketingController extends Controller
                 'sla_paused_at' => $slaPausedAt,
             ]);
 
-            if ($linkedItem) {
+            if (! empty($linkedItemIds)) {
+                $ticket->syncInventoryItems($linkedItemIds);
                 $this->inventorySync->syncFromTicket($ticket, $currentUser);
             }
 
@@ -269,7 +283,7 @@ class TicketingController extends Controller
             abort(403, 'Anda tidak memiliki akses ke tiket ini.');
         }
 
-        $ticket->load(['user', 'assignee', 'inventoryItem', 'maintenances.performer', 'messages.user', 'slaLogs.creator']);
+        $ticket->load(['user', 'assignee', 'inventoryItem', 'inventoryItems', 'maintenances.inventoryItem', 'maintenances.performer', 'messages.user', 'slaLogs.creator']);
         $inventoryItems = InventoryItem::where('condition', '!=', 'retired')
             ->orderBy('asset_code')
             ->get();
@@ -649,30 +663,53 @@ class TicketingController extends Controller
 
         $validated = $request->validate([
             'inventory_item_id' => 'nullable|exists:inventory_items,id',
+            'inventory_item_ids' => 'nullable|array',
+            'inventory_item_ids.*' => 'integer|exists:inventory_items,id',
         ]);
 
-        $ticket->update([
-            'inventory_item_id' => $validated['inventory_item_id'] ?? null,
-        ]);
-
-        if ($ticket->inventory_item_id) {
-            $item = InventoryItem::find($ticket->inventory_item_id);
-            $this->inventorySync->syncFromTicket($ticket, $user);
-
-            TicketMessage::create([
-                'ticket_id' => $ticket->id,
-                'user_id' => $user->id,
-                'sender_type' => 'system',
-                'message' => "📦 **Sinkronisasi Inventaris:** Tiket ditautkan ke aset **{$item?->asset_code} ({$item?->name})** oleh **{$user->name}**.",
-            ]);
-        } else {
-            TicketMessage::create([
-                'ticket_id' => $ticket->id,
-                'user_id' => $user->id,
-                'sender_type' => 'system',
-                'message' => "📦 **Sinkronisasi Inventaris:** Tautan aset inventaris dilepas oleh **{$user->name}**.",
-            ]);
+        $newIds = $validated['inventory_item_ids'] ?? [];
+        if (! empty($validated['inventory_item_id'])) {
+            $newIds[] = (int) $validated['inventory_item_id'];
         }
+        $newIds = array_values(array_unique(array_filter(
+            array_map('intval', $newIds),
+            static fn (int $id): bool => $id > 0,
+        )));
+
+        DB::transaction(function () use ($ticket, $newIds, $user): void {
+            $previousIds = $ticket->linkedInventoryItems()->pluck('id')->all();
+            $detachedIds = array_values(array_diff($previousIds, $newIds));
+
+            $ticket->syncInventoryItems($newIds);
+
+            if (! empty($detachedIds)) {
+                $this->inventorySync->detachAssetsFromTicket($ticket, $detachedIds, $user);
+            }
+
+            if (! empty($newIds)) {
+                $this->inventorySync->syncFromTicket($ticket, $user);
+
+                $linkedAssets = $ticket->linkedInventoryItems();
+                $summary = $linkedAssets
+                    ->map(static fn (InventoryItem $asset): string => "{$asset->asset_code} ({$asset->name})")
+                    ->implode(', ');
+                $count = $linkedAssets->count();
+
+                TicketMessage::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => $user->id,
+                    'sender_type' => 'system',
+                    'message' => "📦 **Sinkronisasi Inventaris:** Tiket ditautkan ke **{$count} aset**: {$summary} oleh **{$user->name}**.",
+                ]);
+            } else {
+                TicketMessage::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => $user->id,
+                    'sender_type' => 'system',
+                    'message' => "📦 **Sinkronisasi Inventaris:** Seluruh tautan aset inventaris dilepas oleh **{$user->name}**.",
+                ]);
+            }
+        });
 
         return back()->with('success', 'Tautan aset inventaris berhasil diperbarui.');
     }

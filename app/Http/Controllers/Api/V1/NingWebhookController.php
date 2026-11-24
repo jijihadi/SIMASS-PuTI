@@ -31,6 +31,10 @@ class NingWebhookController extends Controller
             'device_ip' => ['nullable', 'ip'],
             'location' => ['nullable', 'string', 'max:200'],
             'asset_code' => ['nullable', 'string', 'max:80'],
+            'asset_codes' => ['nullable', 'array'],
+            'asset_codes.*' => ['string', 'max:80'],
+            'inventory_item_ids' => ['nullable', 'array'],
+            'inventory_item_ids.*' => ['integer', 'exists:inventory_items,id'],
             'latency_ms' => ['nullable', 'numeric', 'min:0', 'max:600000'],
             'message' => ['nullable', 'string', 'max:1000'],
             'incident_id' => ['nullable', 'string', 'max:100'],
@@ -41,12 +45,24 @@ class NingWebhookController extends Controller
         $deviceIp = $validated['device_ip'] ?? null;
         $location = isset($validated['location']) ? trim($validated['location']) : null;
         $assetCode = isset($validated['asset_code']) ? strtoupper(trim($validated['asset_code'])) : null;
+        $assetCodes = array_values(array_unique(array_filter(array_merge(
+            $assetCode ? [$assetCode] : [],
+            array_map(static fn (string $code): string => strtoupper(trim($code)), $validated['asset_codes'] ?? []),
+        ))));
+        $inventoryItemIdsInput = array_values(array_unique(array_map('intval', $validated['inventory_item_ids'] ?? [])));
         $latencyMs = isset($validated['latency_ms']) ? (float) $validated['latency_ms'] : null;
         $incidentId = isset($validated['incident_id']) ? trim($validated['incident_id']) : null;
 
-        $inventoryItem = $assetCode
-            ? InventoryItem::where('asset_code', $assetCode)->first()
-            : null;
+        $linkedItems = collect();
+        if (! empty($inventoryItemIdsInput)) {
+            $linkedItems = $linkedItems->merge(InventoryItem::whereIn('id', $inventoryItemIdsInput)->get());
+        }
+        if (! empty($assetCodes)) {
+            $linkedItems = $linkedItems->merge(InventoryItem::whereIn('asset_code', $assetCodes)->get());
+        }
+        $linkedItems = $linkedItems->unique('id')->values();
+        $linkedItemIds = $linkedItems->pluck('id')->all();
+        $inventoryItem = $linkedItems->first();
 
         if (! $location && $inventoryItem?->location_detail) {
             $location = $inventoryItem->location_detail;
@@ -60,6 +76,7 @@ class NingWebhookController extends Controller
             $deviceIp,
             $location,
             $inventoryItem,
+            $linkedItemIds,
             $latencyMs,
             $incidentId,
             $alertMessage,
@@ -85,7 +102,7 @@ class NingWebhookController extends Controller
                     'is_internal' => false,
                 ]);
 
-                return ['ticket' => $activeTicket->fresh(['user', 'assignee', 'inventoryItem']), 'status_code' => 200, 'deduplicated' => false, 'resolved' => true];
+                return ['ticket' => $activeTicket->fresh(['user', 'assignee', 'inventoryItem', 'inventoryItems']), 'status_code' => 200, 'deduplicated' => false, 'resolved' => true];
             }
 
             if ($activeTicket) {
@@ -97,7 +114,7 @@ class NingWebhookController extends Controller
                     'is_internal' => false,
                 ]);
 
-                return ['ticket' => $activeTicket->fresh(['user', 'assignee', 'inventoryItem']), 'status_code' => 200, 'deduplicated' => true, 'resolved' => false];
+                return ['ticket' => $activeTicket->fresh(['user', 'assignee', 'inventoryItem', 'inventoryItems']), 'status_code' => 200, 'deduplicated' => true, 'resolved' => false];
             }
 
             $systemUser = User::where('is_active', true)->where('type', 'Staf')->first()
@@ -131,6 +148,10 @@ class NingWebhookController extends Controller
                 'sla_due_at' => now()->addHours($slaHours),
             ]);
 
+            if (! empty($linkedItemIds)) {
+                $ticket->syncInventoryItems($linkedItemIds);
+            }
+
             TicketMessage::create([
                 'ticket_id' => $ticket->id,
                 'user_id' => null,
@@ -139,7 +160,7 @@ class NingWebhookController extends Controller
                 'is_internal' => false,
             ]);
 
-            return ['ticket' => $ticket->fresh(['user', 'assignee', 'inventoryItem']), 'status_code' => 201, 'deduplicated' => false, 'resolved' => false];
+            return ['ticket' => $ticket->fresh(['user', 'assignee', 'inventoryItem', 'inventoryItems']), 'status_code' => 201, 'deduplicated' => false, 'resolved' => false];
         });
 
         if ($result['status_code'] === 503) {
