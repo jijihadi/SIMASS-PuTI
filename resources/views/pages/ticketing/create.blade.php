@@ -106,19 +106,25 @@
         </div>
 
         <div>
-          <label for="inventory_item_id" class="block text-sm font-bold text-gray-900 dark:text-gray-200 mb-1.5">
-            Tautkan Aset Inventaris (Opsional)
+          <label for="inventory_item_ids" class="block text-sm font-bold text-gray-900 dark:text-gray-200 mb-1.5">
+            Tautkan Aset Inventaris (Opsional, bisa &gt; 1 aset)
           </label>
-          <select name="inventory_item_id" id="inventory_item_id"
+          @php
+            $oldAssetIds = array_map('strval', (array) old('inventory_item_ids', []));
+          @endphp
+          <select name="inventory_item_ids[]" id="inventory_item_ids" multiple
+            placeholder="Pilih satu atau lebih aset inventaris..."
             class="w-full px-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-telkom-500 transition">
-            <option value="">-- Tidak Terkait Aset Tertentu --</option>
             @foreach($inventoryItems ?? [] as $asset)
-              <option value="{{ $asset->id }}" {{ (string) old('inventory_item_id') === (string) $asset->id ? 'selected' : '' }}>
-                {{ $asset->asset_code }} — {{ $asset->name }} ({{ $asset->display_location }})
+              <option value="{{ $asset->id }}"
+                data-selection-label="{{ $asset->asset_code }}"
+                title="{{ $asset->asset_code }} — {{ $asset->name }} ({{ $asset->condition_label }})"
+                {{ in_array((string) $asset->id, $oldAssetIds, true) ? 'selected' : '' }}>
+                {{ $asset->asset_code }} — {{ $asset->name }} ({{ $asset->condition_label }})
               </option>
             @endforeach
           </select>
-          <p class="text-xs text-gray-500 mt-1">Otomatis menyinkronkan kondisi aset di Inventaris.</p>
+          <p class="text-xs text-gray-500 mt-1">1 tiket dapat menautkan beberapa aset sekaligus untuk sinkronisasi otomatis.</p>
         </div>
 
         <div>
@@ -151,9 +157,9 @@
         <label for="attachment" class="block text-sm font-bold text-gray-900 dark:text-gray-200 mb-1.5">
           Lampiran Foto / Tangkapan Layar (Opsional)
         </label>
-        <input type="file" name="attachment" id="attachment" accept=".jpg,.jpeg,.png,.webp,.pdf"
+        <input type="file" name="attachment" id="attachment" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
           class="w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 dark:file:bg-gray-800 dark:file:text-gray-300 transition">
-        <p class="text-xs text-gray-400 mt-1">Format: JPG, PNG, WEBP, atau PDF. Maksimal ukuran 5 MB.</p>
+        <p class="text-xs text-gray-400 mt-1">Format: JPG, PNG, WEBP, HEIC/HEIF, atau PDF. Maksimal ukuran 10 MB.</p>
       </div>
 
       <!-- Submit Button -->

@@ -96,4 +96,13 @@ class User extends Authenticatable
     {
         return $this->hasMany(Ticket::class, 'assigned_to');
     }
+
+    /**
+     * Determine whether the user is staff or unit head in the ticketing domain.
+     */
+    public function isTicketingStaff(): bool
+    {
+        return $this->hasAnyRole(['super-admin', 'staff', 'student-staff', 'unit-head'])
+            || $this->type === 'Staf';
+    }
 }

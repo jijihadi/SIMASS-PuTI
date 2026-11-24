@@ -102,12 +102,12 @@
                                 <td class="px-5 py-3.5">{{ $u->users_count }} pengguna</td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editUnitData = { id: {{ $u->id }}, name: '{{ addslashes($u->name) }}', code: '{{ addslashes($u->code ?? '') }}' }; editUnitModal = true"
+                                        @click="editUnitData = @js(['id' => $u->id, 'name' => $u->name, 'code' => $u->code ?? '']); editUnitModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
                                     <x-button type="button" variant="table-danger" icon="trash-2"
-                                        onclick="confirmDelete('{{ route('admin.units.destroy', $u) }}', 'unit {{ addslashes($u->name) }}')">
+                                        onclick="confirmDelete(@js(route('admin.units.destroy', $u)), @js('unit ' . $u->name))">
                                         Hapus
                                     </x-button>
                                 </td>
@@ -151,12 +151,12 @@
                                 <td class="px-5 py-3.5"><code>{{ $l->code ?? '-' }}</code></td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editLocationData = { id: {{ $l->id }}, type: '{{ $l->type }}', name: '{{ addslashes($l->name) }}', parent_id: '{{ $l->parent_id ?? '' }}', code: '{{ addslashes($l->code ?? '') }}' }; editLocationModal = true"
+                                        @click="editLocationData = @js(['id' => $l->id, 'type' => $l->type, 'name' => $l->name, 'parent_id' => $l->parent_id ?? '', 'code' => $l->code ?? '']); editLocationModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
                                     <x-button type="button" variant="table-danger" icon="trash-2"
-                                        onclick="confirmDelete('{{ route('admin.locations.destroy', $l) }}', 'lokasi {{ addslashes($l->name) }}')">
+                                        onclick="confirmDelete(@js(route('admin.locations.destroy', $l)), @js('lokasi ' . $l->name))">
                                         Hapus
                                     </x-button>
                                 </td>
@@ -200,12 +200,12 @@
                                 </td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editServiceData = { id: {{ $s->id }}, category: '{{ addslashes($s->category) }}', name: '{{ addslashes($s->name) }}', sla_resolution_hours: {{ $s->sla_resolution_hours }}, is_active: {{ $s->is_active ? 'true' : 'false' }} }; editServiceModal = true"
+                                        @click="editServiceData = @js(['id' => $s->id, 'category' => $s->category, 'name' => $s->name, 'sla_resolution_hours' => $s->sla_resolution_hours, 'is_active' => (bool) $s->is_active]); editServiceModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
                                     <x-button type="button" variant="table-danger" icon="trash-2"
-                                        onclick="confirmDelete('{{ route('admin.services.destroy', $s) }}', 'layanan {{ addslashes($s->name) }}')">
+                                        onclick="confirmDelete(@js(route('admin.services.destroy', $s)), @js('layanan ' . $s->name))">
                                         Hapus
                                     </x-button>
                                 </td>
@@ -251,7 +251,7 @@
                                 <td class="px-5 py-3.5 font-bold text-purple-600">{{ $cat->items_count }}</td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editCategoryData = { id: {{ $cat->id }}, name: '{{ addslashes($cat->name) }}', code: '{{ addslashes($cat->code ?? '') }}', description: '{{ addslashes($cat->description ?? '') }}', is_active: {{ $cat->is_active ? 'true' : 'false' }} }; editCategoryModal = true"
+                                        @click="editCategoryData = @js(['id' => $cat->id, 'name' => $cat->name, 'code' => $cat->code ?? '', 'description' => $cat->description ?? '', 'is_active' => (bool) $cat->is_active]); editCategoryModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
@@ -304,7 +304,7 @@
                                 <td class="px-5 py-3.5 font-bold text-purple-600">{{ $type->items_count }}</td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editTypeData = { id: {{ $type->id }}, name: '{{ addslashes($type->name) }}', code: '{{ addslashes($type->code) }}', description: '{{ addslashes($type->description ?? '') }}', is_active: {{ $type->is_active ? 'true' : 'false' }} }; editTypeModal = true"
+                                        @click="editTypeData = @js(['id' => $type->id, 'name' => $type->name, 'code' => $type->code, 'description' => $type->description ?? '', 'is_active' => (bool) $type->is_active]); editTypeModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
@@ -362,7 +362,7 @@
                                 <td class="px-5 py-3.5 font-bold text-purple-600">{{ $st->items_count }}</td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editStatusData = { id: {{ $st->id }}, name: '{{ addslashes($st->name) }}', code: '{{ addslashes($st->code) }}', color: '{{ addslashes($st->color) }}', is_active: {{ $st->is_active ? 'true' : 'false' }} }; editStatusModal = true"
+                                        @click="editStatusData = @js(['id' => $st->id, 'name' => $st->name, 'code' => $st->code, 'color' => $st->color, 'is_active' => (bool) $st->is_active]); editStatusModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
@@ -420,7 +420,7 @@
                                 <td class="px-5 py-3.5 font-bold text-purple-600">{{ $cd->items_count }}</td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editConditionData = { id: {{ $cd->id }}, name: '{{ addslashes($cd->name) }}', code: '{{ addslashes($cd->code) }}', color: '{{ addslashes($cd->color) }}', is_active: {{ $cd->is_active ? 'true' : 'false' }} }; editConditionModal = true"
+                                        @click="editConditionData = @js(['id' => $cd->id, 'name' => $cd->name, 'code' => $cd->code, 'color' => $cd->color, 'is_active' => (bool) $cd->is_active]); editConditionModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>

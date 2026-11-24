@@ -129,7 +129,7 @@
                   <td class="px-5 py-4 text-center">
                     <div class="flex items-center justify-center gap-1.5">
                       <x-button type="button" variant="table" icon="eye"
-                        onclick="openProofModal('{{ addslashes($d['nama'] ?? '') }}', '{{ $d['tgl'] }}', '{{ $d['waktu'] }}', '{{ addslashes($d['pekerjaan'] ?? '') }}', '{{ $d['foto'] ?? '' }}')"
+                        onclick="openProofModal(@js($d['nama'] ?? ''), @js($d['tgl']), @js($d['waktu']), @js($d['pekerjaan'] ?? ''), @js($d['foto'] ?? ''))"
                         title="Lihat Detail">
                         Detail
                       </x-button>
@@ -139,11 +139,11 @@
                             $cout = explode(' - ', $d['waktu'])[1] ?? '';
                         @endphp
                         <x-button type="button" variant="table-blue" icon="pencil" title="Edit"
-                          onclick="openEditModal('{{ $d['id'] ?? '' }}', '{{ $cin }}', '{{ $cout }}', '{{ addslashes($d['pekerjaan'] ?? '') }}')">
+                          onclick="openEditModal(@js($d['id'] ?? ''), @js($cin), @js($cout), @js($d['pekerjaan'] ?? ''))">
                           Edit
                         </x-button>
                         <x-button type="button" variant="table-danger" icon="trash-2" title="Hapus"
-                          onclick="confirmDelete('{{ $d['id'] ?? '' }}')">
+                          onclick="confirmDelete(@js($d['id'] ?? ''))">
                           Hapus
                         </x-button>
                       @endif

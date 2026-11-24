@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -35,7 +36,7 @@ class TicketingController extends Controller
     {
         $user = $this->currentUser();
         $userId = $user->id;
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         $baseQuery = $isStaff ? Ticket::query() : Ticket::where('user_id', $userId);
 
@@ -83,6 +84,8 @@ class TicketingController extends Controller
             'description' => 'required|string|min:5',
             'location' => 'nullable|string|max:255',
             'inventory_item_id' => 'nullable|exists:inventory_items,id',
+            'inventory_item_ids' => 'nullable|array',
+            'inventory_item_ids.*' => 'integer|exists:inventory_items,id',
             'priority' => 'required|in:low,medium,high,urgent',
             'attachment' => 'nullable|file|mimes:jpeg,png,jpg,webp,heic,heif,pdf|max:10240',
         ]);
@@ -92,9 +95,19 @@ class TicketingController extends Controller
             $attachmentPath = $request->file('attachment')->store('tickets/attachments', 'public');
         }
 
-        $linkedItem = ! empty($validated['inventory_item_id'])
-            ? InventoryItem::find($validated['inventory_item_id'])
-            : null;
+        $linkedItemIds = $validated['inventory_item_ids'] ?? [];
+        if (! empty($validated['inventory_item_id'])) {
+            $linkedItemIds[] = (int) $validated['inventory_item_id'];
+        }
+        $linkedItemIds = array_values(array_unique(array_filter(
+            array_map('intval', $linkedItemIds),
+            static fn (int $id): bool => $id > 0,
+        )));
+
+        $linkedItems = ! empty($linkedItemIds)
+            ? InventoryItem::whereIn('id', $linkedItemIds)->get()
+            : collect();
+        $linkedItem = $linkedItems->first();
 
         $resolvedLocation = $validated['location'] ?? ($linkedItem?->display_location !== '-' ? $linkedItem?->display_location : null);
 
@@ -137,68 +150,103 @@ class TicketingController extends Controller
             $slaDueAt = $now->copy()->addHours($hours);
         }
 
-        // 4. Create Ticket Record
-        $ticket = Ticket::create([
-            'ticket_number' => Ticket::generateTicketNumber(),
-            'user_id' => Auth::id(),
-            'inventory_item_id' => $linkedItem?->id,
-            'assigned_to' => $assignedTo,
-            'category' => $validated['category'],
-            'service_item' => $validated['service_item'],
-            'authority' => $authority,
-            'scope' => $scope,
-            'status' => $status,
-            'priority' => $validated['priority'],
-            'location' => $resolvedLocation,
-            'title' => $validated['title'],
-            'description' => $validated['description'],
-            'attachment' => $attachmentPath,
-            'source_channel' => 'web',
-            'sla_due_at' => $slaDueAt,
-            'sla_paused_at' => $slaPausedAt,
-        ]);
+        // Short-window duplicate protection for double-tapped web submissions (15 seconds)
+        $recentDuplicate = Ticket::where('user_id', Auth::id())
+            ->where('source_channel', 'web')
+            ->where('title', trim($validated['title']))
+            ->where('description', trim($validated['description']))
+            ->where('created_at', '>=', now()->subSeconds(15))
+            ->latest()
+            ->first();
 
-        if ($linkedItem) {
-            $this->inventorySync->syncFromTicket($ticket, $this->currentUser());
+        if ($recentDuplicate) {
+            return redirect()->route('ticket.show', $recentDuplicate)
+                ->with('success', "Tiket {$recentDuplicate->ticket_number} sudah tercatat.");
         }
 
-        // 5. Initial User Message
-        TicketMessage::create([
-            'ticket_id' => $ticket->id,
-            'user_id' => Auth::id(),
-            'sender_type' => 'user',
-            'message' => $validated['description'],
-            'attachment' => $attachmentPath,
-        ]);
+        // 4. Create Ticket Record, Initial Message & SLA Logs Atomically
+        $currentUser = $this->currentUser();
+        $ticket = DB::transaction(function () use (
+            $linkedItem,
+            $linkedItemIds,
+            $assignedTo,
+            $validated,
+            $authority,
+            $scope,
+            $status,
+            $resolvedLocation,
+            $attachmentPath,
+            $slaDueAt,
+            $slaPausedAt,
+            $ambiguityMsg,
+            $now,
+            $currentUser,
+        ): Ticket {
+            $ticket = Ticket::create([
+                'ticket_number' => Ticket::generateTicketNumber(),
+                'user_id' => Auth::id(),
+                'inventory_item_id' => $linkedItem?->id,
+                'assigned_to' => $assignedTo,
+                'category' => $validated['category'],
+                'service_item' => $validated['service_item'],
+                'authority' => $authority,
+                'scope' => $scope,
+                'status' => $status,
+                'priority' => $validated['priority'],
+                'location' => $resolvedLocation,
+                'title' => $validated['title'],
+                'description' => $validated['description'],
+                'attachment' => $attachmentPath,
+                'source_channel' => 'web',
+                'sla_due_at' => $slaDueAt,
+                'sla_paused_at' => $slaPausedAt,
+            ]);
 
-        // 6. Automated Luna Responses & SLA Logs
-        if ($authority === 'central') {
+            if (! empty($linkedItemIds)) {
+                $ticket->syncInventoryItems($linkedItemIds);
+                $this->inventorySync->syncFromTicket($ticket, $currentUser);
+            }
+
+            // 5. Initial User Message
             TicketMessage::create([
                 'ticket_id' => $ticket->id,
-                'user_id' => null,
-                'sender_type' => 'ai_luna',
-                'message' => "Halo! Saya **Luna AI** dari PuTI Surabaya. Laporan Anda telah kami terima dan tercatat dengan nomor **{$ticket->ticket_number}**.\n\nKarena layanan **{$ticket->service_item}** memerlukan sinkronisasi pada sistem terpusat, tim PuTI Surabaya sedang mengawal dan mengoordinasikan laporan Anda bersama tim sistem terpusat Telkom University. Perkembangan penanganan akan kami informasikan langsung di thread ini. 😊",
+                'user_id' => Auth::id(),
+                'sender_type' => 'user',
+                'message' => $validated['description'],
+                'attachment' => $attachmentPath,
             ]);
 
-            TicketSlaLog::create([
-                'ticket_id' => $ticket->id,
-                'paused_at' => $now,
-                'reason' => 'Koordinasi Sistem Terpusat',
-            ]);
-        } elseif ($ambiguityMsg !== null) {
-            TicketMessage::create([
-                'ticket_id' => $ticket->id,
-                'user_id' => null,
-                'sender_type' => 'ai_luna',
-                'message' => $ambiguityMsg,
-            ]);
+            // 6. Automated Luna Responses & SLA Logs
+            if ($authority === 'central') {
+                TicketMessage::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => null,
+                    'sender_type' => 'ai_luna',
+                    'message' => "Halo! Saya **Luna AI** dari PuTI Surabaya. Laporan Anda telah kami terima dan tercatat dengan nomor **{$ticket->ticket_number}**.\n\nKarena layanan **{$ticket->service_item}** memerlukan sinkronisasi pada sistem terpusat, tim PuTI Surabaya sedang mengawal dan mengoordinasikan laporan Anda bersama tim sistem terpusat Telkom University. Perkembangan penanganan akan kami informasikan langsung di thread ini. 😊",
+                ]);
 
-            TicketSlaLog::create([
-                'ticket_id' => $ticket->id,
-                'paused_at' => $now,
-                'reason' => 'Menunggu Tanggapan Pelapor (Klarifikasi Informasi Kendala)',
-            ]);
-        }
+                TicketSlaLog::create([
+                    'ticket_id' => $ticket->id,
+                    'paused_at' => $now,
+                    'reason' => 'Koordinasi Sistem Terpusat',
+                ]);
+            } elseif ($ambiguityMsg !== null) {
+                TicketMessage::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => null,
+                    'sender_type' => 'ai_luna',
+                    'message' => $ambiguityMsg,
+                ]);
+
+                TicketSlaLog::create([
+                    'ticket_id' => $ticket->id,
+                    'paused_at' => $now,
+                    'reason' => 'Menunggu Tanggapan Pelapor (Klarifikasi Informasi Kendala)',
+                ]);
+            }
+
+            return $ticket;
+        });
 
         return redirect()->route('ticket.show', $ticket)
             ->with('success', "Tiket {$ticket->ticket_number} berhasil dibuat!");
@@ -228,14 +276,14 @@ class TicketingController extends Controller
     public function show(Ticket $ticket): View
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         // Authorization check: User can only view their own ticket, unless staff
         if (! $isStaff && $ticket->user_id !== $user->id) {
             abort(403, 'Anda tidak memiliki akses ke tiket ini.');
         }
 
-        $ticket->load(['user', 'assignee', 'inventoryItem', 'maintenances.performer', 'messages.user', 'slaLogs.creator']);
+        $ticket->load(['user', 'assignee', 'inventoryItem', 'inventoryItems', 'maintenances.inventoryItem', 'maintenances.performer', 'messages.user', 'slaLogs.creator']);
         $inventoryItems = InventoryItem::where('condition', '!=', 'retired')
             ->orderBy('asset_code')
             ->get();
@@ -249,7 +297,7 @@ class TicketingController extends Controller
     public function reply(Request $request, Ticket $ticket): RedirectResponse
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         if (! $isStaff && $ticket->user_id !== $user->id) {
             abort(403, 'Akses ditolak.');
@@ -333,7 +381,7 @@ class TicketingController extends Controller
     public function updateStatus(Request $request, Ticket $ticket): RedirectResponse
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         if (! $isStaff) {
             abort(403, 'Hanya staf yang dapat mengubah status tiket.');
@@ -513,7 +561,7 @@ class TicketingController extends Controller
     public function overrideScope(Request $request, Ticket $ticket): RedirectResponse
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         if (! $isStaff) {
             abort(403, 'Akses ditolak.');
@@ -547,7 +595,7 @@ class TicketingController extends Controller
             TicketSlaLog::create([
                 'ticket_id' => $ticket->id,
                 'paused_at' => $now,
-                'reason' => 'Manual Override: Dialihkan ke Koordinasi Sistem Terpusat (' . $validated['override_notes'] . ')',
+                'reason' => 'Manual Override: Dialihkan ke Koordinasi Sistem Terpusat ('.$validated['override_notes'].')',
                 'created_by' => $user->id,
             ]);
 
@@ -607,7 +655,7 @@ class TicketingController extends Controller
     public function linkInventory(Request $request, Ticket $ticket): RedirectResponse
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         if (! $isStaff) {
             abort(403, 'Akses ditolak.');
@@ -615,30 +663,53 @@ class TicketingController extends Controller
 
         $validated = $request->validate([
             'inventory_item_id' => 'nullable|exists:inventory_items,id',
+            'inventory_item_ids' => 'nullable|array',
+            'inventory_item_ids.*' => 'integer|exists:inventory_items,id',
         ]);
 
-        $ticket->update([
-            'inventory_item_id' => $validated['inventory_item_id'] ?? null,
-        ]);
-
-        if ($ticket->inventory_item_id) {
-            $item = InventoryItem::find($ticket->inventory_item_id);
-            $this->inventorySync->syncFromTicket($ticket, $user);
-
-            TicketMessage::create([
-                'ticket_id' => $ticket->id,
-                'user_id' => $user->id,
-                'sender_type' => 'system',
-                'message' => "📦 **Sinkronisasi Inventaris:** Tiket ditautkan ke aset **{$item?->asset_code} ({$item?->name})** oleh **{$user->name}**.",
-            ]);
-        } else {
-            TicketMessage::create([
-                'ticket_id' => $ticket->id,
-                'user_id' => $user->id,
-                'sender_type' => 'system',
-                'message' => "📦 **Sinkronisasi Inventaris:** Tautan aset inventaris dilepas oleh **{$user->name}**.",
-            ]);
+        $newIds = $validated['inventory_item_ids'] ?? [];
+        if (! empty($validated['inventory_item_id'])) {
+            $newIds[] = (int) $validated['inventory_item_id'];
         }
+        $newIds = array_values(array_unique(array_filter(
+            array_map('intval', $newIds),
+            static fn (int $id): bool => $id > 0,
+        )));
+
+        DB::transaction(function () use ($ticket, $newIds, $user): void {
+            $previousIds = $ticket->linkedInventoryItems()->pluck('id')->all();
+            $detachedIds = array_values(array_diff($previousIds, $newIds));
+
+            $ticket->syncInventoryItems($newIds);
+
+            if (! empty($detachedIds)) {
+                $this->inventorySync->detachAssetsFromTicket($ticket, $detachedIds, $user);
+            }
+
+            if (! empty($newIds)) {
+                $this->inventorySync->syncFromTicket($ticket, $user);
+
+                $linkedAssets = $ticket->linkedInventoryItems();
+                $summary = $linkedAssets
+                    ->map(static fn (InventoryItem $asset): string => "{$asset->asset_code} ({$asset->name})")
+                    ->implode(', ');
+                $count = $linkedAssets->count();
+
+                TicketMessage::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => $user->id,
+                    'sender_type' => 'system',
+                    'message' => "📦 **Sinkronisasi Inventaris:** Tiket ditautkan ke **{$count} aset**: {$summary} oleh **{$user->name}**.",
+                ]);
+            } else {
+                TicketMessage::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => $user->id,
+                    'sender_type' => 'system',
+                    'message' => "📦 **Sinkronisasi Inventaris:** Seluruh tautan aset inventaris dilepas oleh **{$user->name}**.",
+                ]);
+            }
+        });
 
         return back()->with('success', 'Tautan aset inventaris berhasil diperbarui.');
     }
@@ -649,7 +720,7 @@ class TicketingController extends Controller
     public function tasks(Request $request): View
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         if (! $isStaff) {
             abort(403, 'Halaman ini khusus untuk staf dan teknisi PuTI.');
@@ -714,7 +785,7 @@ class TicketingController extends Controller
     public function history(Request $request): View
     {
         $user = $this->currentUser();
-        $isStaff = $user->hasAnyRole(['super-admin', 'staff', 'student-staff']) || $user->type === 'Staf';
+        $isStaff = $user->isTicketingStaff();
 
         $query = Ticket::with(['user', 'assignee'])->latest();
 

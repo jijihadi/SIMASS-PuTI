@@ -650,7 +650,8 @@
       // FACE RECOGNITION LOGIC
       // ==========================================
       const hasRegisteredFace = {{ $faceDescriptor ? 'true' : 'false' }};
-      const registeredDescriptorData = {!! $faceDescriptor ? $faceDescriptor : 'null' !!};
+      const registeredDescriptorData = @js($faceDescriptor ? json_decode($faceDescriptor, true) : null);
+      const currentAuthUserName = @js(auth()->user()->name);
 
       let isModelsLoaded = false;
       let cameraStream = null;
@@ -825,8 +826,13 @@
                 const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
                 if (bestMatch.label === 'Current User' && bestMatch.distance < 0.55) {
                   isFaceVerified = true;
-                  matchStatusText.innerHTML =
-                    `Wajah dikenali sebagai <strong class="text-gray-900 dark:text-white">{{ addslashes(auth()->user()->name) }}</strong>!`;
+                  matchStatusText.textContent = '';
+                  matchStatusText.appendChild(document.createTextNode('Wajah dikenali sebagai '));
+                  const strongName = document.createElement('strong');
+                  strongName.className = 'text-gray-900 dark:text-white';
+                  strongName.textContent = currentAuthUserName;
+                  matchStatusText.appendChild(strongName);
+                  matchStatusText.appendChild(document.createTextNode('!'));
                   matchStatusText.classList.remove('text-gray-500', 'text-red-500');
                   matchStatusText.classList.add('text-green-600');
 
@@ -853,7 +859,7 @@
                   }
 
                   const nameEl = document.getElementById('verifiedNameDisplay');
-                  if (nameEl) nameEl.textContent = `Halo, {{ addslashes(auth()->user()->name) }}!`;
+                  if (nameEl) nameEl.textContent = `Halo, ${currentAuthUserName}!`;
                 } else {
                   matchStatusText.textContent = "Wajah tidak cocok (Distance: " + bestMatch.distance.toFixed(2) +
                     ")";

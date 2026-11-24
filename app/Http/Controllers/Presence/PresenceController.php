@@ -193,7 +193,7 @@ class PresenceController extends Controller
 
         $request->validate([
             'pekerjaan' => ['required', 'string', 'max:500'],
-            'foto' => ['nullable', 'image', 'max:2048'],
+            'foto' => ['nullable', 'file', 'mimes:jpeg,jpg,png,webp,heic,heif', 'max:10240'],
         ]);
 
         $jamMasuk = Carbon::parse($presence->tanggal.' '.$presence->jam_masuk);
@@ -427,7 +427,7 @@ class PresenceController extends Controller
             'jam_masuk' => ['required', 'date_format:H:i'],
             'jam_pulang' => ['nullable', 'date_format:H:i', 'after_or_equal:jam_masuk'],
             'pekerjaan' => ['nullable', 'string'],
-            'foto' => ['nullable', 'image', 'max:2048'],
+            'foto' => ['nullable', 'file', 'mimes:jpeg,jpg,png,webp,heic,heif', 'max:10240'],
         ], [
             'jam_pulang.after_or_equal' => 'Jam pulang tidak boleh lebih kecil dari jam masuk.',
         ]);
@@ -729,6 +729,32 @@ class PresenceController extends Controller
             Storage::disk('public')->put($path, $imageData);
 
             return $path;
+        }
+
+        // Normalize EXIF orientation for mobile/iPhone uploads when EXIF extension is available
+        if (function_exists('exif_read_data')) {
+            $exifStream = @fopen('php://memory', 'r+');
+            if ($exifStream !== false) {
+                fwrite($exifStream, $imageData);
+                rewind($exifStream);
+                $exif = @exif_read_data($exifStream);
+                fclose($exifStream);
+
+                $orientation = (int) ($exif['Orientation'] ?? 1);
+                $angle = match ($orientation) {
+                    3 => 180,
+                    6 => -90,
+                    8 => 90,
+                    default => 0,
+                };
+                if ($angle !== 0) {
+                    $rotated = @imagerotate($image, $angle, 0);
+                    if ($rotated !== false) {
+                        imagedestroy($image);
+                        $image = $rotated;
+                    }
+                }
+            }
         }
 
         $width = imagesx($image);

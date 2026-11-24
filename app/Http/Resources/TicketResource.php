@@ -53,6 +53,13 @@ class TicketResource extends JsonResource
                 'condition' => $this->inventoryItem->condition,
                 'condition_label' => $this->inventoryItem->condition_label,
             ] : null,
+            'inventory_items' => $this->linkedInventoryItems()->map(static fn ($item): array => [
+                'id' => $item->id,
+                'asset_code' => $item->asset_code,
+                'name' => $item->name,
+                'condition' => $item->condition,
+                'condition_label' => $item->condition_label,
+            ])->values()->all(),
             'cancel_reason' => $this->cancel_reason,
             'transferred_unit' => $this->transferred_unit,
             'status_note' => $this->status_note,
