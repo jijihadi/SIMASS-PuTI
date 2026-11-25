@@ -119,20 +119,20 @@
                 <td class="px-5 py-3.5 text-center">
                   <div class="flex items-center justify-center gap-1.5">
                     @if(!$d['is_lengkap'] && Auth::id() === $d['user_id'] && !empty($d['raw_cout']))
-                      <x-button type="button" variant="table-amber" onclick="openLengkapiModal(@js($d['id']), @js($d['raw_cin']), @js($d['raw_cout']), @js($d['raw_pekerjaan'] ?? ''))" title="Lengkapi Presensi">Lengkapi</x-button>
+                      <x-button type="button" variant="table-amber" onclick="openLengkapiModal({{ Js::from($d['id']) }}, {{ Js::from($d['raw_cin']) }}, {{ Js::from($d['raw_cout']) }}, {{ Js::from($d['raw_pekerjaan'] ?? '') }})" title="Lengkapi Presensi">Lengkapi</x-button>
                     @endif
                     <x-button type="button" variant="table" icon="eye"
-                      onclick="openProofModal(@js($d['nama'] ?? ''), @js($d['tgl']), @js($d['cin']), @js($d['pekerjaan'] ?? ''), @js($d['foto'] ?? ''))"
+                      onclick="openProofModal({{ Js::from($d['nama'] ?? '') }}, {{ Js::from($d['tgl']) }}, {{ Js::from($d['cin']) }}, {{ Js::from($d['pekerjaan'] ?? '') }}, {{ Js::from($d['foto'] ?? '') }})"
                       title="Lihat Bukti">
                       Bukti
                     </x-button>
                     @if(Auth::id() === $d['user_id'] || Auth::user()->can('manage-presence'))
                     <x-button type="button" variant="table-blue" icon="pencil"
-                      onclick="openEditModal(@js($d['id']), @js($d['raw_cin']), @js($d['raw_cout']), @js($d['pekerjaan'] ?? ''))" title="Edit">
+                      onclick="openEditModal({{ Js::from($d['id']) }}, {{ Js::from($d['raw_cin']) }}, {{ Js::from($d['raw_cout']) }}, {{ Js::from($d['pekerjaan'] ?? '') }})" title="Edit">
                       Edit
                     </x-button>
                     <x-button type="button" variant="table-danger" icon="trash-2"
-                      onclick="confirmDelete(@js($d['id']))" title="Hapus">
+                      onclick="confirmDelete({{ Js::from($d['id']) }})" title="Hapus">
                       Hapus
                     </x-button>
                     @endif

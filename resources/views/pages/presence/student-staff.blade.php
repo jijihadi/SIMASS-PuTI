@@ -209,12 +209,12 @@
                 <td class="px-5 py-4 text-center">
                   <div class="flex items-center justify-center gap-1.5">
                     <x-button variant="table" icon="pencil"
-                      onclick="openEditStaffModal(@js($staff['id']), @js($staff['name']), @js($staff['username']), @js($staff['nim']), @js($staff['phone']), @js($staff['role']), @js($staff['email']), @js($staff['type']), @js((bool) $staff['is_active']))"
+                      onclick="openEditStaffModal({{ Js::from($staff['id']) }}, {{ Js::from($staff['name']) }}, {{ Js::from($staff['username']) }}, {{ Js::from($staff['nim']) }}, {{ Js::from($staff['phone']) }}, {{ Js::from($staff['role']) }}, {{ Js::from($staff['email']) }}, {{ Js::from($staff['type']) }}, {{ Js::from((bool) $staff['is_active']) }})"
                       title="Edit Staff">
                       Edit
                     </x-button>
                     <x-button variant="table-danger" icon="trash-2"
-                      onclick="confirmDelete(@js(route('presence.student-staff.destroy', $staff['id'])), @js($staff['name']))"
+                      onclick="confirmDelete({{ Js::from(route('presence.student-staff.destroy', $staff['id'])) }}, {{ Js::from($staff['name']) }})"
                       title="Hapus Staff">
                       Hapus
                     </x-button>
@@ -274,12 +274,12 @@
 
             <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
               <x-button variant="table" icon="pencil"
-                onclick="openEditStaffModal(@js($staff['id']), @js($staff['name']), @js($staff['username']), @js($staff['nim']), @js($staff['phone']), @js($staff['role']), @js($staff['email']), @js($staff['type']), @js((bool) $staff['is_active']))"
+                onclick="openEditStaffModal({{ Js::from($staff['id']) }}, {{ Js::from($staff['name']) }}, {{ Js::from($staff['username']) }}, {{ Js::from($staff['nim']) }}, {{ Js::from($staff['phone']) }}, {{ Js::from($staff['role']) }}, {{ Js::from($staff['email']) }}, {{ Js::from($staff['type']) }}, {{ Js::from((bool) $staff['is_active']) }})"
                 title="Edit Staff">
                 Edit
               </x-button>
               <x-button variant="table-danger" icon="trash-2"
-                onclick="confirmDelete(@js(route('presence.student-staff.destroy', $staff['id'])), @js($staff['name']))"
+                onclick="confirmDelete({{ Js::from(route('presence.student-staff.destroy', $staff['id'])) }}, {{ Js::from($staff['name']) }})"
                 title="Hapus Staff">
                 Hapus
               </x-button>

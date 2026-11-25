@@ -209,7 +209,7 @@
                         <x-button variant="table" icon="edit-3" @click="openEdit({{ json_encode($mod) }})">
                             Edit Kartu
                         </x-button>
-                        <x-button variant="table-danger" icon="trash-2" onclick="confirmDelete(@js(route('admin.modules.destroy', $mod)), @js('modul ' . $mod->name))">
+                        <x-button variant="table-danger" icon="trash-2" onclick="confirmDelete({{ Js::from(route('admin.modules.destroy', $mod)) }}, {{ Js::from('modul ' . $mod->name) }})">
                             Hapus
                         </x-button>
                     </div>

@@ -146,7 +146,7 @@
                 <td class="px-5 py-4 text-center">
                   <div class="flex items-center justify-center">
                     <x-button type="button" variant="table-primary" icon="repeat"
-                      onclick="openAlokasiModal(@js($d['id']), @js($d['user_id']), @js($d['nama']), @js($d['tgl']), @js($d['raw_saldo']), @js($d['saldo']))"
+                      onclick="openAlokasiModal({{ Js::from($d['id']) }}, {{ Js::from($d['user_id']) }}, {{ Js::from($d['nama']) }}, {{ Js::from($d['tgl']) }}, {{ Js::from($d['raw_saldo']) }}, {{ Js::from($d['saldo']) }})"
                       :disabled="$d['raw_saldo'] <= 0">
                       Alihkan Saldo
                     </x-button>

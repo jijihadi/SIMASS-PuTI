@@ -102,12 +102,12 @@
                                 <td class="px-5 py-3.5">{{ $u->users_count }} pengguna</td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editUnitData = @js(['id' => $u->id, 'name' => $u->name, 'code' => $u->code ?? '']); editUnitModal = true"
+                                        @click="editUnitData = {{ Js::from(['id' => $u->id, 'name' => $u->name, 'code' => $u->code ?? '']) }}; editUnitModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
                                     <x-button type="button" variant="table-danger" icon="trash-2"
-                                        onclick="confirmDelete(@js(route('admin.units.destroy', $u)), @js('unit ' . $u->name))">
+                                        onclick="confirmDelete({{ Js::from(route('admin.units.destroy', $u)) }}, {{ Js::from('unit ' . $u->name) }})">
                                         Hapus
                                     </x-button>
                                 </td>
@@ -151,12 +151,12 @@
                                 <td class="px-5 py-3.5"><code>{{ $l->code ?? '-' }}</code></td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editLocationData = @js(['id' => $l->id, 'type' => $l->type, 'name' => $l->name, 'parent_id' => $l->parent_id ?? '', 'code' => $l->code ?? '']); editLocationModal = true"
+                                        @click="editLocationData = {{ Js::from(['id' => $l->id, 'type' => $l->type, 'name' => $l->name, 'parent_id' => $l->parent_id ?? '', 'code' => $l->code ?? '']) }}; editLocationModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
                                     <x-button type="button" variant="table-danger" icon="trash-2"
-                                        onclick="confirmDelete(@js(route('admin.locations.destroy', $l)), @js('lokasi ' . $l->name))">
+                                        onclick="confirmDelete({{ Js::from(route('admin.locations.destroy', $l)) }}, {{ Js::from('lokasi ' . $l->name) }})">
                                         Hapus
                                     </x-button>
                                 </td>
@@ -200,12 +200,12 @@
                                 </td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editServiceData = @js(['id' => $s->id, 'category' => $s->category, 'name' => $s->name, 'sla_resolution_hours' => $s->sla_resolution_hours, 'is_active' => (bool) $s->is_active]); editServiceModal = true"
+                                        @click="editServiceData = {{ Js::from(['id' => $s->id, 'category' => $s->category, 'name' => $s->name, 'sla_resolution_hours' => $s->sla_resolution_hours, 'is_active' => (bool) $s->is_active]) }}; editServiceModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
                                     <x-button type="button" variant="table-danger" icon="trash-2"
-                                        onclick="confirmDelete(@js(route('admin.services.destroy', $s)), @js('layanan ' . $s->name))">
+                                        onclick="confirmDelete({{ Js::from(route('admin.services.destroy', $s)) }}, {{ Js::from('layanan ' . $s->name) }})">
                                         Hapus
                                     </x-button>
                                 </td>
@@ -251,7 +251,7 @@
                                 <td class="px-5 py-3.5 font-bold text-purple-600">{{ $cat->items_count }}</td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editCategoryData = @js(['id' => $cat->id, 'name' => $cat->name, 'code' => $cat->code ?? '', 'description' => $cat->description ?? '', 'is_active' => (bool) $cat->is_active]); editCategoryModal = true"
+                                        @click="editCategoryData = {{ Js::from(['id' => $cat->id, 'name' => $cat->name, 'code' => $cat->code ?? '', 'description' => $cat->description ?? '', 'is_active' => (bool) $cat->is_active]) }}; editCategoryModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
@@ -304,7 +304,7 @@
                                 <td class="px-5 py-3.5 font-bold text-purple-600">{{ $type->items_count }}</td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editTypeData = @js(['id' => $type->id, 'name' => $type->name, 'code' => $type->code, 'description' => $type->description ?? '', 'is_active' => (bool) $type->is_active]); editTypeModal = true"
+                                        @click="editTypeData = {{ Js::from(['id' => $type->id, 'name' => $type->name, 'code' => $type->code, 'description' => $type->description ?? '', 'is_active' => (bool) $type->is_active]) }}; editTypeModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
@@ -362,7 +362,7 @@
                                 <td class="px-5 py-3.5 font-bold text-purple-600">{{ $st->items_count }}</td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editStatusData = @js(['id' => $st->id, 'name' => $st->name, 'code' => $st->code, 'color' => $st->color, 'is_active' => (bool) $st->is_active]); editStatusModal = true"
+                                        @click="editStatusData = {{ Js::from(['id' => $st->id, 'name' => $st->name, 'code' => $st->code, 'color' => $st->color, 'is_active' => (bool) $st->is_active]) }}; editStatusModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>
@@ -420,7 +420,7 @@
                                 <td class="px-5 py-3.5 font-bold text-purple-600">{{ $cd->items_count }}</td>
                                 <td class="px-5 py-3.5 text-center whitespace-nowrap">
                                     <x-button type="button" variant="table-blue" icon="edit-3"
-                                        @click="editConditionData = @js(['id' => $cd->id, 'name' => $cd->name, 'code' => $cd->code, 'color' => $cd->color, 'is_active' => (bool) $cd->is_active]); editConditionModal = true"
+                                        @click="editConditionData = {{ Js::from(['id' => $cd->id, 'name' => $cd->name, 'code' => $cd->code, 'color' => $cd->color, 'is_active' => (bool) $cd->is_active]) }}; editConditionModal = true"
                                         class="mr-2">
                                         Edit
                                     </x-button>

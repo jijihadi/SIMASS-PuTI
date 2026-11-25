@@ -175,7 +175,7 @@
                                         @endif
 
                                         <x-button variant="table" icon="edit-3"
-                                            @click="openEdit(@js([
+                                            @click="openEdit({{ Js::from([
                                                 'id' => $user->id,
                                                 'name' => $user->name,
                                                 'username' => $user->username,
@@ -186,7 +186,7 @@
                                                 'position' => $user->position ?? '',
                                                 'unit_id' => $user->unit_id ?? '',
                                                 'role' => $user->roles->first()?->name ?? 'staff',
-                                            ]))" title="Edit Pengguna">
+                                            ]) }})" title="Edit Pengguna">
                                             Edit
                                         </x-button>
 

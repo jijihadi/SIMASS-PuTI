@@ -6,6 +6,9 @@ use App\Providers\AppServiceProvider;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
+use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Js;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -103,4 +106,26 @@ test('production keeps the request host', function () {
     bootBehindRewrittenHost('production', 'https://simass.example');
 
     expect(route('login'))->toBe('https://localhost:8000/login');
+});
+
+// =========================================================================
+// 3. JS Values Inside Blade Component Attributes
+// =========================================================================
+
+test('Js::from inside a component attribute renders a safe JS literal', function () {
+    $name = 'O\'Neil "A"';
+    $html = Blade::render('<x-button onclick="hapus({{ Js::from($name) }})">x</x-button>', compact('name'));
+
+    expect($html)->toContain('onclick="hapus('.Js::from($name).')"');
+});
+
+// Blade tidak mengompilasi directive di dalam tag <x-...>: @js di sana sampai ke browser mentah.
+test('no view uses @js inside a component tag', function () {
+    $broken = collect(File::allFiles(resource_path('views')))->filter(function ($view) {
+        preg_match_all('/<x-(?:"[^"]*"|\'[^\']*\'|[^"\'>]++)*+>/', $view->getContents(), $tags);
+
+        return str_contains(implode($tags[0]), '@js(');
+    })->map->getRelativePathname()->values()->all();
+
+    expect($broken)->toBe([]);
 });
