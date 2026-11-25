@@ -80,6 +80,13 @@ class InventoryMaintenance extends Model
             $number = ((int) $matches[1]) + 1;
         }
 
-        return $prefix.str_pad((string) $number, 4, '0', STR_PAD_LEFT);
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $candidate = $prefix.str_pad((string) ($number + $attempt), 4, '0', STR_PAD_LEFT);
+            if (! self::where('maintenance_code', $candidate)->exists()) {
+                return $candidate;
+            }
+        }
+
+        return $prefix.strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
     }
 }

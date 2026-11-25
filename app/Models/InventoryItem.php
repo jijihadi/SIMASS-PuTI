@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class InventoryItem extends Model
@@ -125,9 +126,11 @@ class InventoryItem extends Model
         return $this->belongsTo(CampusLocation::class, 'campus_location_id');
     }
 
-    public function tickets(): HasMany
+    public function tickets(): BelongsToMany
     {
-        return $this->hasMany(Ticket::class, 'inventory_item_id')->orderBy('created_at', 'desc');
+        return $this->belongsToMany(Ticket::class, 'ticket_inventory_item')
+            ->withTimestamps()
+            ->orderByDesc('tickets.created_at');
     }
 
     public function maintenances(): HasMany

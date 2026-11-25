@@ -4,9 +4,11 @@ namespace App\Models;
 
 use App\Enums\TicketStatus;
 use Database\Factories\TicketFactory;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Ticket extends Model
@@ -74,6 +76,21 @@ class Ticket extends Model
         'resolved_at' => 'datetime',
     ];
 
+    protected static function booted(): void
+    {
+        static::created(function (self $ticket): void {
+            if ($ticket->inventory_item_id) {
+                $ticket->inventoryItems()->syncWithoutDetaching([$ticket->inventory_item_id]);
+            }
+        });
+
+        static::updated(function (self $ticket): void {
+            if ($ticket->wasChanged('inventory_item_id') && $ticket->inventory_item_id) {
+                $ticket->inventoryItems()->syncWithoutDetaching([$ticket->inventory_item_id]);
+            }
+        });
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
@@ -87,6 +104,60 @@ class Ticket extends Model
     public function inventoryItem(): BelongsTo
     {
         return $this->belongsTo(InventoryItem::class, 'inventory_item_id');
+    }
+
+    public function inventoryItems(): BelongsToMany
+    {
+        return $this->belongsToMany(InventoryItem::class, 'ticket_inventory_item')
+            ->withTimestamps()
+            ->orderBy('inventory_items.asset_code');
+    }
+
+    /**
+     * Get all inventory items linked to this ticket (pivot with fallback to legacy primary column).
+     *
+     * @return Collection<int, InventoryItem>
+     */
+    public function linkedInventoryItems(): Collection
+    {
+        $items = $this->relationLoaded('inventoryItems')
+            ? $this->inventoryItems
+            : $this->inventoryItems()->get();
+
+        if ($items->isEmpty() && $this->inventory_item_id) {
+            $primary = $this->relationLoaded('inventoryItem')
+                ? $this->inventoryItem
+                : $this->inventoryItem()->first();
+
+            if ($primary) {
+                return new Collection([$primary]);
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * Synchronize linked inventory assets and keep legacy primary inventory_item_id in sync.
+     *
+     * @param  array<int, int|string|null>  $itemIds
+     */
+    public function syncInventoryItems(array $itemIds): void
+    {
+        $uniqueIds = array_values(array_unique(array_filter(
+            array_map(static fn (int|string|null $id): int => (int) $id, $itemIds),
+            static fn (int $id): bool => $id > 0,
+        )));
+
+        $this->inventoryItems()->sync($uniqueIds);
+
+        $primaryId = $uniqueIds[0] ?? null;
+        if ($this->inventory_item_id !== $primaryId) {
+            $this->forceFill(['inventory_item_id' => $primaryId])->saveQuietly();
+        }
+
+        $this->unsetRelation('inventoryItems');
+        $this->unsetRelation('inventoryItem');
     }
 
     public function maintenances(): HasMany
@@ -152,6 +223,13 @@ class Ticket extends Model
             $number = ((int) $matches[1]) + 1;
         }
 
-        return $prefix.str_pad((string) $number, 4, '0', STR_PAD_LEFT);
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $candidate = $prefix.str_pad((string) ($number + $attempt), 4, '0', STR_PAD_LEFT);
+            if (! self::where('ticket_number', $candidate)->exists()) {
+                return $candidate;
+            }
+        }
+
+        return $prefix.strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
     }
 }

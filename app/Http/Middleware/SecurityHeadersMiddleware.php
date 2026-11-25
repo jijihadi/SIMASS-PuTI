@@ -21,6 +21,23 @@ class SecurityHeadersMiddleware
         $response->headers->set('X-XSS-Protection', '1; mode=block');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Permissions-Policy', 'camera=(self), geolocation=(self), microphone=()');
+        $localHttpScheme = app()->isLocal() ? ' http:' : '';
+        $localWsScheme = app()->isLocal() ? ' ws:' : '';
+
+        $response->headers->set(
+            'Content-Security-Policy',
+            "default-src 'self'; "
+            ."script-src 'self' 'unsafe-inline' 'unsafe-eval' https:{$localHttpScheme}; "
+            ."style-src 'self' 'unsafe-inline' https:{$localHttpScheme}; "
+            ."img-src 'self' data: blob: https:{$localHttpScheme}; "
+            ."font-src 'self' data: https:{$localHttpScheme}; "
+            ."connect-src 'self' wss: https:{$localHttpScheme}{$localWsScheme}; "
+            ."frame-ancestors 'self';"
+        );
+
+        if ($request->isSecure() || app()->isProduction()) {
+            $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        }
 
         return $response;
     }

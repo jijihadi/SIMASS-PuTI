@@ -19,19 +19,25 @@ class InventorySyncService
     ) {}
 
     /**
-     * Synchronize InventoryItem condition and InventoryMaintenance log when a Ticket changes.
+     * Synchronize all linked InventoryItems and InventoryMaintenance logs when a Ticket changes.
      */
     public function syncFromTicket(Ticket $ticket, ?User $actor = null, ?string $note = null): void
     {
-        if (! $ticket->inventory_item_id) {
+        $items = $ticket->linkedInventoryItems();
+        if ($items->isEmpty()) {
             return;
         }
 
-        $item = InventoryItem::find($ticket->inventory_item_id);
-        if (! $item) {
-            return;
+        foreach ($items as $item) {
+            $this->syncSingleAssetFromTicket($ticket, $item, $actor, $note);
         }
+    }
 
+    /**
+     * Synchronize a single linked InventoryItem and its InventoryMaintenance log for a Ticket.
+     */
+    private function syncSingleAssetFromTicket(Ticket $ticket, InventoryItem $item, ?User $actor = null, ?string $note = null): void
+    {
         $statusEnum = $ticket->statusEnum() ?? TicketStatus::Open;
         $now = now();
         $performerId = $actor?->id ?? $ticket->assigned_to ?? $ticket->user_id;
@@ -42,7 +48,10 @@ class InventorySyncService
             'condition' => $item->condition,
         ];
 
-        $maintenance = InventoryMaintenance::where('ticket_id', $ticket->id)->latest('id')->first();
+        $maintenance = InventoryMaintenance::where('ticket_id', $ticket->id)
+            ->where('inventory_item_id', $item->id)
+            ->latest('id')
+            ->first();
 
         if (in_array($statusEnum, [TicketStatus::InProgress, TicketStatus::Redirected], true)) {
             $item->update([
@@ -175,6 +184,59 @@ class InventorySyncService
     }
 
     /**
+     * Cancel in-progress maintenances and restore condition for assets detached from a ticket.
+     *
+     * @param  list<int>  $detachedItemIds
+     */
+    public function detachAssetsFromTicket(Ticket $ticket, array $detachedItemIds, ?User $actor = null): void
+    {
+        if ($detachedItemIds === []) {
+            return;
+        }
+
+        $now = now();
+        $actorId = $actor?->id ?? $ticket->assigned_to ?? $ticket->user_id;
+
+        foreach ($detachedItemIds as $itemId) {
+            $item = InventoryItem::find($itemId);
+            if (! $item) {
+                continue;
+            }
+
+            $oldState = [
+                'location' => $item->display_location,
+                'status' => $item->status,
+                'condition' => $item->condition,
+            ];
+
+            InventoryMaintenance::where('ticket_id', $ticket->id)
+                ->where('inventory_item_id', $item->id)
+                ->where('status', MaintenanceStatus::InProgress->value)
+                ->update([
+                    'status' => MaintenanceStatus::Canceled->value,
+                    'action_notes' => 'Tautan aset dilepas dari tiket.',
+                    'completed_at' => $now,
+                ]);
+
+            $hasOtherActiveMaintenance = InventoryMaintenance::where('inventory_item_id', $item->id)
+                ->where('status', MaintenanceStatus::InProgress->value)
+                ->exists();
+
+            if (! $hasOtherActiveMaintenance && $item->condition === InventoryCondition::Maintenance->value) {
+                $item->update([
+                    'condition' => InventoryCondition::Good->value,
+                ]);
+                $item->recordHistory(
+                    changeType: 'ticket_sync',
+                    oldState: $oldState,
+                    notes: "Tautan tiket #{$ticket->ticket_number} dilepas. Kondisi aset dikembalikan ke Normal.",
+                    userId: $actorId
+                );
+            }
+        }
+    }
+
+    /**
      * Synchronize InventoryItem and optionally Ticket when an InventoryMaintenance record is saved.
      */
     public function syncFromMaintenance(
@@ -229,23 +291,41 @@ class InventorySyncService
                 userId: $actorId
             );
 
-            // Auto-resolve linked ticket if maintenance succeeded
+            // Auto-resolve linked ticket only once all linked assets have completed maintenance
             if ($autoResolveTicket && $maintenance->ticket_id && $resultCondition === InventoryCondition::Good->value) {
                 $ticket = Ticket::find($maintenance->ticket_id);
                 if ($ticket && ! $ticket->isFinalStatus()) {
-                    $ticket->update([
-                        'status' => TicketStatus::Finished->value,
-                        'status_note' => $maintenance->action_notes ?? 'Diselesaikan melalui modul Maintenance Inventaris.',
-                        'resolved_at' => $now,
-                        'sla_paused_at' => null,
-                    ]);
+                    $linkedIds = $ticket->linkedInventoryItems()->pluck('id')->all();
+                    $completedIds = InventoryMaintenance::where('ticket_id', $ticket->id)
+                        ->where('status', MaintenanceStatus::Completed->value)
+                        ->pluck('inventory_item_id')
+                        ->unique()
+                        ->all();
+                    $remainingIds = array_values(array_diff($linkedIds, $completedIds));
 
-                    TicketMessage::create([
-                        'ticket_id' => $ticket->id,
-                        'user_id' => $actor?->id ?? $maintenance->performed_by,
-                        'sender_type' => 'system',
-                        'message' => "🔧 **Sinkronisasi Inventaris:** Aset **{$item->asset_code} ({$item->name})** telah selesai diperbaiki pada Maintenance **#{$maintenance->maintenance_code}**. Status tiket otomatis ditandai **Selesai**.",
-                    ]);
+                    if (count($remainingIds) > 0) {
+                        $remainingCount = count($remainingIds);
+                        TicketMessage::create([
+                            'ticket_id' => $ticket->id,
+                            'user_id' => $actor?->id ?? $maintenance->performed_by,
+                            'sender_type' => 'system',
+                            'message' => "🔧 **Sinkronisasi Inventaris:** Aset **{$item->asset_code} ({$item->name})** telah selesai diperbaiki pada Maintenance **#{$maintenance->maintenance_code}**. Masih menunggu penyelesaian **{$remainingCount} aset** lainnya pada tiket ini.",
+                        ]);
+                    } else {
+                        $ticket->update([
+                            'status' => TicketStatus::Finished->value,
+                            'status_note' => $maintenance->action_notes ?? 'Diselesaikan melalui modul Maintenance Inventaris.',
+                            'resolved_at' => $now,
+                            'sla_paused_at' => null,
+                        ]);
+
+                        TicketMessage::create([
+                            'ticket_id' => $ticket->id,
+                            'user_id' => $actor?->id ?? $maintenance->performed_by,
+                            'sender_type' => 'system',
+                            'message' => "🔧 **Sinkronisasi Inventaris:** Seluruh aset tertaut termasuk **{$item->asset_code} ({$item->name})** telah selesai diperbaiki pada Maintenance **#{$maintenance->maintenance_code}**. Status tiket otomatis ditandai **Selesai**.",
+                        ]);
+                    }
                 }
             }
 
