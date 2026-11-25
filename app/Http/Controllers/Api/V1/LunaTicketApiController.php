@@ -17,6 +17,7 @@ use App\Services\LunaAiService;
 use App\Services\TicketAssignmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class LunaTicketApiController extends Controller
@@ -50,11 +51,12 @@ class LunaTicketApiController extends Controller
     {
         $query = Ticket::with(['user', 'assignee', 'inventoryItem'])->latest();
 
-        $normalizedPhone = $request->input('normalized_phone')
-            ?: VerifyLunaApiKey::normalizeWaPhone($request->query('phone'));
+        $reporterPhone = VerifyLunaApiKey::normalizeWaPhone($request->query('reporter_phone'));
 
-        if ($normalizedPhone !== '') {
-            $query->where('reporter_phone', $normalizedPhone);
+        if ($reporterPhone !== '') {
+            $query->where('reporter_phone', $reporterPhone);
+        } else {
+            $query->where('source_channel', 'whatsapp_luna');
         }
 
         if ($request->filled('status')) {
@@ -76,6 +78,11 @@ class LunaTicketApiController extends Controller
     {
         $validated = $request->validate([
             'phone' => ['required', 'string', 'max:50'],
+            'reporter_phone' => ['nullable', 'string', 'max:50'],
+            'reporter_status' => ['nullable', 'in:mahasiswa,dosen,staf'],
+            'unit_kerja' => ['nullable', 'string', 'max:150'],
+            'request_type' => ['nullable', 'in:PENGADUAN IT,PERMINTAAN LAYANAN'],
+            'external_id' => ['nullable', 'string', 'max:100'],
             'reporter_name' => ['nullable', 'string', 'max:150'],
             'nim' => ['nullable', 'string', 'max:50'],
             'title' => ['nullable', 'string', 'max:255'],
@@ -100,7 +107,46 @@ class LunaTicketApiController extends Controller
             ], 403);
         }
 
-        $reporter = $this->resolveReporter($normalizedPhone, $validated['nim'] ?? null, $validated['reporter_name'] ?? null);
+        $idempotencyKey = trim((string) ($request->header('Idempotency-Key') ?: ($validated['external_id'] ?? '')));
+
+        if ($idempotencyKey === '') {
+            return $this->createTicket($validated, $normalizedPhone, null);
+        }
+
+        return Cache::lock("luna-ticket-idempotency:{$idempotencyKey}", 10)
+            ->block(3, function () use ($validated, $normalizedPhone, $idempotencyKey): JsonResponse {
+                $existing = Ticket::with(['user', 'assignee', 'inventoryItem', 'messages.user'])
+                    ->where('idempotency_key', $idempotencyKey)
+                    ->where('created_at', '>=', now()->subDay())
+                    ->latest('id')
+                    ->first();
+
+                if ($existing) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => "Tiket {$existing->ticket_number} sudah pernah dibuat dengan Idempotency-Key yang sama.",
+                        'data' => new TicketResource($existing),
+                    ]);
+                }
+
+                return $this->createTicket($validated, $normalizedPhone, $idempotencyKey);
+            });
+    }
+
+    /**
+     * Persist a new ticket from validated Luna payload.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function createTicket(array $validated, string $normalizedPhone, ?string $idempotencyKey): JsonResponse
+    {
+        $reporterPhone = VerifyLunaApiKey::normalizeWaPhone($validated['reporter_phone'] ?? null);
+        $reporter = $this->resolveReporter($reporterPhone ?: $normalizedPhone, $validated['nim'] ?? null, $validated['reporter_name'] ?? null);
+
+        $mainDescription = $this->mainDescription($validated['description']);
+        $lunaCategoryHint = preg_match('/^Kategori \(Luna\):\s*(.+)$/mi', $validated['description'], $hintMatch)
+            ? trim($hintMatch[1])
+            : '';
 
         // Resolve linked inventory item by ID or asset_code
         $linkedItem = null;
@@ -115,7 +161,7 @@ class LunaTicketApiController extends Controller
         $serviceItem = $validated['service_item'] ?? null;
 
         if (! $category || ! $serviceItem || ! isset(Ticket::SERVICES[$category][$serviceItem])) {
-            $suggestion = $this->lunaAi->suggestService(($validated['title'] ?? '').' '.$validated['description']);
+            $suggestion = $this->lunaAi->suggestService(trim(($validated['title'] ?? '').' '.$mainDescription.' '.$lunaCategoryHint));
             if ($suggestion) {
                 $category = $suggestion['category'];
                 $serviceItem = $suggestion['service_item'];
@@ -130,10 +176,10 @@ class LunaTicketApiController extends Controller
         $priority = $validated['priority'] ?? 'medium';
         $title = ! empty($validated['title'])
             ? $validated['title']
-            : Str::limit(trim($validated['description']), 80, '...');
+            : Str::limit($mainDescription, 80, '...');
 
         $ambiguityMsg = $this->lunaAi->evaluateAmbiguity(
-            $validated['description'],
+            $mainDescription,
             $location,
             $authority
         );
@@ -180,8 +226,12 @@ class LunaTicketApiController extends Controller
             'title' => $title,
             'description' => $validated['description'],
             'source_channel' => 'whatsapp_luna',
-            'reporter_phone' => $normalizedPhone,
+            'reporter_phone' => $reporterPhone ?: $normalizedPhone,
             'reporter_name' => $validated['reporter_name'] ?? $reporter->name,
+            'reporter_status' => $validated['reporter_status'] ?? null,
+            'unit_kerja' => $validated['unit_kerja'] ?? null,
+            'request_type' => $validated['request_type'] ?? null,
+            'idempotency_key' => $idempotencyKey,
             'sla_due_at' => $slaDueAt,
             'sla_paused_at' => $slaPausedAt,
         ]);
@@ -403,6 +453,17 @@ class LunaTicketApiController extends Controller
             'message' => "Tiket {$ticket->ticket_number} berhasil dibatalkan.",
             'data' => new TicketResource($ticket),
         ]);
+    }
+
+    /**
+     * Strip the Luna metadata block (after a "---" separator line) from a description.
+     */
+    private function mainDescription(string $description): string
+    {
+        $normalized = str_replace("\r\n", "\n", $description);
+        $main = trim(Str::before($normalized, "\n\n---"));
+
+        return $main !== '' ? $main : trim($normalized);
     }
 
     /**

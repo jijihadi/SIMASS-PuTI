@@ -63,6 +63,10 @@ class Ticket extends Model
         'source_channel',
         'reporter_phone',
         'reporter_name',
+        'reporter_status',
+        'unit_kerja',
+        'request_type',
+        'idempotency_key',
         'sla_due_at',
         'sla_paused_at',
         'resolved_at',
@@ -142,7 +146,7 @@ class Ticket extends Model
 
     public static function generateTicketNumber(): string
     {
-        $prefix = 'TIC-'.now()->format('Ym').'-';
+        $prefix = 'TICK-'.now()->format('Ym').'-';
         $latest = self::where('ticket_number', 'like', "{$prefix}%")
             ->orderBy('id', 'desc')
             ->first();

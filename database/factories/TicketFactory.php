@@ -20,7 +20,7 @@ class TicketFactory extends Factory
     public function definition(): array
     {
         return [
-            'ticket_number' => 'TIC-'.now()->format('Ym').'-'.fake()->unique()->numerify('####'),
+            'ticket_number' => 'TICK-'.now()->format('Ym').'-'.fake()->unique()->numerify('####'),
             'user_id' => User::factory(),
             'category' => 'Jaringan & Internet',
             'service_item' => 'Wi-Fi Kampus (Eduroam / TelU-Guest)',

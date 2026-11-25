@@ -41,7 +41,7 @@ test('user can submit valid local ticket and ticket number is generated', functi
 
     $ticket = Ticket::where('title', $payload['title'])->first();
     expect($ticket)->not->toBeNull();
-    expect($ticket->ticket_number)->toStartWith('TIC-');
+    expect($ticket->ticket_number)->toStartWith('TICK-');
     expect($ticket->scope)->toBe('internal_surabaya');
     expect($ticket->status)->toBe(TicketStatus::Open->value);
     expect($ticket->user_status_label)->toBe('Diterima');
