@@ -18,6 +18,7 @@ use App\Services\LunaAiService;
 use App\Services\TicketAssignmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -59,7 +60,7 @@ class LunaTicketApiController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'updated_since' => ['nullable', 'date'],
-            'source' => ['nullable', 'string', 'max:30'],
+            'reporter_phone' => ['nullable', 'string', 'max:80'],
         ], [
             'updated_since.date' => 'updated_since harus berupa tanggal/waktu yang valid (ISO 8601).',
         ]);
@@ -70,20 +71,18 @@ class LunaTicketApiController extends Controller
 
         $query = Ticket::with(['user', 'assignee', 'inventoryItem', 'inventoryItems']);
 
-        $normalizedPhone = $request->input('normalized_phone')
-            ?: VerifyLunaApiKey::normalizeWaPhone($request->query('phone'));
+        // `phone`/X-Wa-Number adalah nomor bot, jadi bukan penyaring tiket.
+        $reporterPhone = VerifyLunaApiKey::normalizeWaPhone($request->query('reporter_phone'));
 
-        if ($normalizedPhone !== '') {
-            $query->where('reporter_phone', $normalizedPhone);
+        if ($reporterPhone !== '') {
+            $query->where('reporter_phone', $reporterPhone);
+        } else {
+            $query->where('source_channel', 'whatsapp_luna');
         }
 
         if ($request->filled('status')) {
             $status = strtolower(trim((string) $request->query('status')));
             $query->where('status', $status);
-        }
-
-        if ($request->filled('source')) {
-            $query->where('source_channel', $request->input('source'));
         }
 
         if ($request->filled('updated_since')) {
@@ -126,9 +125,15 @@ class LunaTicketApiController extends Controller
                 $input['asset_codes'],
             )));
         }
+        $input['external_id'] = $request->header('Idempotency-Key') ?: ($input['external_id'] ?? null);
 
         $validator = Validator::make($input, [
             'phone' => ['required', 'string', 'max:80'],
+            'reporter_phone' => ['nullable', 'string', 'max:80'],
+            'reporter_status' => ['nullable', 'in:mahasiswa,dosen,staf'],
+            'unit_kerja' => ['nullable', 'string', 'max:150'],
+            'request_type' => ['nullable', 'in:PENGADUAN IT,PERMINTAAN LAYANAN'],
+            'external_id' => ['nullable', 'string', 'max:100'],
             'reporter_name' => ['nullable', 'string', 'max:150'],
             'title' => ['nullable', 'string', 'max:255'],
             'description' => ['required', 'string', 'min:3', 'max:4000'],
@@ -160,20 +165,32 @@ class LunaTicketApiController extends Controller
         $validated = $validator->validated();
 
         // Reject WhatsApp group JIDs & malformed phone numbers
-        if (str_contains(strtolower($validated['phone']), '@g.us')) {
-            return $this->validationErrorResponse(
-                'Pelaporan tiket hanya dapat dilakukan melalui chat pribadi, bukan dari grup WhatsApp.',
-                ['phone' => ['Nomor berasal dari grup WhatsApp (@g.us).']]
-            );
+        $phones = [];
+        foreach (['phone', 'reporter_phone'] as $field) {
+            $raw = $validated[$field] ?? null;
+            if ($raw === null) {
+                continue;
+            }
+
+            if (str_contains(strtolower($raw), '@g.us')) {
+                return $this->validationErrorResponse(
+                    'Pelaporan tiket hanya dapat dilakukan melalui chat pribadi, bukan dari grup WhatsApp.',
+                    [$field => ['Nomor berasal dari grup WhatsApp (@g.us).']]
+                );
+            }
+
+            $phones[$field] = VerifyLunaApiKey::normalizeWaPhone($raw);
+            if (strlen($phones[$field]) < 9 || strlen($phones[$field]) > 15) {
+                return $this->validationErrorResponse(
+                    'Format nomor WhatsApp tidak valid. Pastikan mengirim nomor telepon yang benar.',
+                    [$field => ['Format nomor WhatsApp tidak valid (harus 9–15 digit).']]
+                );
+            }
         }
 
-        $normalizedPhone = VerifyLunaApiKey::normalizeWaPhone($validated['phone']);
-        if (strlen($normalizedPhone) < 9 || strlen($normalizedPhone) > 15) {
-            return $this->validationErrorResponse(
-                'Format nomor WhatsApp tidak valid. Pastikan mengirim nomor telepon yang benar.',
-                ['phone' => ['Format nomor WhatsApp tidak valid (harus 9–15 digit).']]
-            );
-        }
+        // `phone` boleh nomor bot; `reporter_phone` nomor pelapor asli, tidak dicek ke nomor yang diizinkan.
+        $normalizedPhone = $phones['phone'];
+        $reporterPhone = $phones['reporter_phone'] ?? $normalizedPhone;
 
         // Privacy Guardrail: prevent storing raw passwords/PINs from WhatsApp chat
         if ($this->containsSensitiveCredentials($validated['description'])) {
@@ -199,26 +216,49 @@ class LunaTicketApiController extends Controller
         }
 
         // Webhook retry / double-send deduplication (within 60 seconds)
-        $trimmedDescription = trim($validated['description']);
         $recentDuplicate = Ticket::with(['user', 'assignee', 'inventoryItem', 'messages.user'])
-            ->where('reporter_phone', $normalizedPhone)
+            ->where('reporter_phone', $reporterPhone)
             ->where('source_channel', 'whatsapp_luna')
-            ->where('description', $trimmedDescription)
+            ->where('description', trim($validated['description']))
             ->where('created_at', '>=', now()->subSeconds(60))
             ->latest()
             ->first();
 
         if ($recentDuplicate) {
-            return response()->json([
-                'success' => true,
-                'duplicate' => true,
-                'message' => "Tiket {$recentDuplicate->ticket_number} sudah tercatat sebelumnya (duplikat webhook diabaikan).",
-                'luna_reply' => "Laporan Anda sudah tercatat dengan nomor tiket **{$recentDuplicate->ticket_number}** (Status: **{$recentDuplicate->user_status_label}**).",
-                'data' => new TicketResource($recentDuplicate),
-            ], 200);
+            return $this->duplicateResponse($recentDuplicate);
         }
 
-        $reporter = $this->resolveReporter($normalizedPhone);
+        $idempotencyKey = trim($validated['external_id'] ?? '');
+
+        if ($idempotencyKey === '') {
+            return $this->createTicket($validated, $reporterPhone);
+        }
+
+        // Same Idempotency-Key within 24 hours returns the existing ticket
+        return Cache::lock("luna-ticket-idempotency:{$idempotencyKey}", 10)
+            ->block(3, function () use ($validated, $reporterPhone, $idempotencyKey): JsonResponse {
+                $existing = Ticket::with(['user', 'assignee', 'inventoryItem', 'messages.user'])
+                    ->where('idempotency_key', $idempotencyKey)
+                    ->where('created_at', '>=', now()->subDay())
+                    ->latest('id')
+                    ->first();
+
+                return $existing
+                    ? $this->duplicateResponse($existing)
+                    : $this->createTicket($validated, $reporterPhone, $idempotencyKey);
+            });
+    }
+
+    /**
+     * Persist a new ticket from a validated Luna payload.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function createTicket(array $validated, string $reporterPhone, ?string $idempotencyKey = null): JsonResponse
+    {
+        $trimmedDescription = trim($validated['description']);
+        $mainDescription = $this->mainDescription($trimmedDescription);
+        $reporter = $this->lunaReporter();
 
         // Resolve linked inventory items by IDs or case-insensitive asset codes
         $warnings = [];
@@ -262,7 +302,7 @@ class LunaTicketApiController extends Controller
             : null;
 
         if ($category === null || $serviceItem === null) {
-            $suggestion = $this->lunaAi->suggestService(($validated['title'] ?? '').' '.$trimmedDescription);
+            $suggestion = $this->lunaAi->suggestService(($validated['title'] ?? '').' '.$mainDescription);
             if ($suggestion) {
                 $category ??= $suggestion['category'];
                 $serviceItem ??= $suggestion['service_item'];
@@ -280,8 +320,10 @@ class LunaTicketApiController extends Controller
         $priority = $validated['priority'] ?? 'medium';
         $title = ! empty($validated['title'])
             ? trim($validated['title'])
-            : Str::limit($trimmedDescription, 80, '...');
+            : Str::limit($mainDescription, 80, '...');
 
+        // Deskripsi lengkap, bukan $mainDescription: Luna belum meneruskan pertanyaan klarifikasi,
+        // jadi laporan pendek akan tertahan tanpa teknisi.
         $ambiguityMsg = $this->lunaAi->evaluateAmbiguity(
             $trimmedDescription,
             $location,
@@ -334,7 +376,8 @@ class LunaTicketApiController extends Controller
             $location,
             $title,
             $trimmedDescription,
-            $normalizedPhone,
+            $reporterPhone,
+            $idempotencyKey,
             $validated,
             $slaDueAt,
             $slaPausedAt,
@@ -357,8 +400,12 @@ class LunaTicketApiController extends Controller
                 'title' => $title,
                 'description' => $trimmedDescription,
                 'source_channel' => 'whatsapp_luna',
-                'reporter_phone' => $normalizedPhone,
+                'reporter_phone' => $reporterPhone,
                 'reporter_name' => $validated['reporter_name'] ?? $reporter->name,
+                'reporter_status' => $validated['reporter_status'] ?? null,
+                'unit_kerja' => $validated['unit_kerja'] ?? null,
+                'request_type' => $validated['request_type'] ?? null,
+                'idempotency_key' => $idempotencyKey,
                 'sla_due_at' => $slaDueAt,
                 'sla_paused_at' => $slaPausedAt,
             ]);
@@ -686,21 +733,42 @@ class LunaTicketApiController extends Controller
     }
 
     /**
-     * Akun dengan nomor WhatsApp yang sama, atau satu akun Luna yang terkunci.
-     * NIM/NIP tidak dicocokkan: pelapor bisa mengetik milik orang lain.
+     * 200 response pointing to the ticket that already exists for a repeated request.
      */
-    private function resolveReporter(string $normalizedPhone): User
+    private function duplicateResponse(Ticket $ticket): JsonResponse
     {
-        $localZeroPhone = str_starts_with($normalizedPhone, '62')
-            ? '0'.substr($normalizedPhone, 2)
-            : $normalizedPhone;
+        return response()->json([
+            'success' => true,
+            'duplicate' => true,
+            'message' => "Tiket {$ticket->ticket_number} sudah tercatat sebelumnya (duplikat webhook diabaikan).",
+            'luna_reply' => "Laporan Anda sudah tercatat dengan nomor tiket **{$ticket->ticket_number}** (Status: **{$ticket->user_status_label}**).",
+            'data' => new TicketResource($ticket),
+        ]);
+    }
 
+    /**
+     * Strip the Luna metadata block (after a "---" separator line) from a description.
+     */
+    private function mainDescription(string $description): string
+    {
+        $normalized = str_replace("\r\n", "\n", $description);
+        $main = trim(Str::before($normalized, "\n\n---"));
+
+        return $main !== '' ? $main : $normalized;
+    }
+
+    /**
+     * Satu akun terkunci untuk semua tiket WhatsApp. Nomor HP dan NIM/NIP tidak dicocokkan ke akun:
+     * nomor di profil bisa diubah sendiri dan NIM bisa diketik siapa pun.
+     */
+    private function lunaReporter(): User
+    {
         // Dicari lewat email, bukan username: username bisa diambil siapa pun dari halaman profil.
-        return User::whereIn('phone', [$normalizedPhone, $localZeroPhone, '+'.$normalizedPhone])->first()
-            ?? User::firstOrCreate(['email' => 'luna-whatsapp@simass.invalid'], [
-                'name' => 'Pelapor WhatsApp (Luna)',
-                'password' => Str::random(40),
-                'is_active' => false,
-            ]);
+        // withTrashed: akun yang terhapus admin tidak boleh menghentikan semua laporan WhatsApp.
+        return User::withTrashed()->firstOrCreate(['email' => 'luna-whatsapp@simass.invalid'], [
+            'name' => 'Pelapor WhatsApp (Luna)',
+            'password' => Str::random(40),
+            'is_active' => false,
+        ]);
     }
 }

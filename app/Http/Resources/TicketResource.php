@@ -37,6 +37,10 @@ class TicketResource extends JsonResource
             'priority' => $this->priority,
             'location' => $this->location,
             'source_channel' => $this->source_channel,
+            'reporter_phone' => $this->reporter_phone,
+            'reporter_status' => $this->reporter_status,
+            'unit_kerja' => $this->unit_kerja,
+            'request_type' => $this->request_type,
             'reporter' => [
                 'id' => $this->user_id,
                 'name' => $this->reporter_display_name,

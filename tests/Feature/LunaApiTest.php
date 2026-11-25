@@ -48,12 +48,6 @@ test('luna whatsapp api rejects non-whitelisted whatsapp phone numbers', functio
 });
 
 test('whitelisted whatsapp number can create ticket via luna api with auto service inference and inventory sync', function () {
-    $staff = User::factory()->create([
-        'type' => 'Staf',
-        'phone' => '081234567890',
-        'name' => 'Admin WhatsApp Luna',
-    ]);
-
     $asset = InventoryItem::factory()->create([
         'asset_code' => 'INV-PUTI-2026-0099',
         'name' => 'Proyektor Ruang Kelas A301',
@@ -77,7 +71,7 @@ test('whitelisted whatsapp number can create ticket via luna api with auto servi
     $ticketNumber = $response->json('data.ticket_number');
     $ticket = Ticket::where('ticket_number', $ticketNumber)->first();
     expect($ticket)->not->toBeNull();
-    expect($ticket->user_id)->toBe($staff->id);
+    expect($ticket->user->email)->toBe('luna-whatsapp@simass.invalid');
     expect($ticket->reporter_phone)->toBe('6281234567890');
     expect($ticket->inventory_item_id)->toBe($asset->id);
 });
@@ -219,9 +213,10 @@ test('luna classifies complaints by word, not by fragments of the payload tail',
     ['processor laptop panas', null],
 ]);
 
-test('reporters without an account share one locked luna account and keep their own name', function () {
+test('whatsapp reporters share one locked luna account and keep their own name', function () {
     config(['services.luna.allowed_wa_number' => '']);
-    $staff = User::factory()->create(['type' => 'Staf', 'nim' => '1234567890']);
+    // Nomor HP dan NIM akun ini sama dengan pelapor: tetap tidak boleh jadi pemilik tiket.
+    $staff = User::factory()->create(['type' => 'Staf', 'nim' => '1234567890', 'phone' => '081111111111']);
 
     $create = fn (string $phone, string $name): Ticket => Ticket::where(
         'ticket_number',
@@ -253,9 +248,10 @@ test('reporters without an account share one locked luna account and keep their 
             ->assertDontSee($account->name);
     }
 
-    // Akun yang dihapus admin tidak boleh membuat halaman tiketnya error.
+    // Akun yang dihapus admin tidak boleh membuat halaman tiketnya error atau menolak laporan baru.
     $account->delete();
     $this->get(route('ticket.show', $first))->assertOk()->assertSee('Pelapor Satu');
+    expect($create('083333333333', 'Pelapor Tiga')->user_id)->toBe($account->id);
 });
 
 test('privacy guardrail blocks secret values but accepts complaints about passwords', function (string $description, int $status) {
@@ -298,10 +294,11 @@ test('luna ticket list supports incremental sync across timezones', function () 
         $make(['updated_at' => now()->subMinutes(10)]);
     }
 
+    // Nomor bot di header bukan penyaring tiket.
     $response = $this->withToken('test-secret-luna-key')
+        ->withHeader('X-Wa-Number', '081234567890')
         ->getJson('/api/v1/luna/tickets?'.http_build_query([
             'updated_since' => now()->subHour()->utc()->toIso8601String(),
-            'source' => 'whatsapp_luna',
         ]))
         ->assertOk()
         ->assertJsonStructure(['data' => [['ticket_number', 'updated_at']]]);

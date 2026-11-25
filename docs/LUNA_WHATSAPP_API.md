@@ -25,8 +25,8 @@ Backend membaca konfigurasi keamanan dari `.env` terlebih dahulu; jika kosong, o
 # Secret Token untuk autentikasi sistem Luna AI (wajib diisi; buat acak, mis. `openssl rand -hex 32`)
 LUNA_API_KEY=
 
-# Nomor WhatsApp yang diizinkan mengakses API (opsional; jika diisi, nomor lain ditolak 403).
-# Kosongkan supaya `phone` berisi nomor pelapor asli.
+# Nomor bot WhatsApp yang diizinkan mengakses API (opsional; jika diisi, `phone` selain nomor ini ditolak 403).
+# Nomor pelapor asli dikirim lewat `reporter_phone` dan tidak dicek ke nomor ini.
 LUNA_ALLOWED_WA_NUMBER=
 
 # Path direktori Knowledge Base Markdown (opsional; default: storage/app/luna-knowledge-base)
@@ -61,7 +61,7 @@ Setiap request ke `/api/v1/luna/*` **wajib** menyertakan header berikut:
 | `Content-Type` | Ya (untuk `POST`) | `application/json` | Format payload request body |
 | `Authorization` | Ya* | `Bearer <LUNA_API_KEY>` | Metode autentikasi utama |
 | `X-Luna-Api-Key` | Alternatif* | `<LUNA_API_KEY>` | Alternatif jika tidak memakai header `Authorization` |
-| `X-Wa-Number` | Opsional | `6281234567890` | Alternatif pengiriman nomor WA pada request `GET` jika tidak memakai query `?phone=...` |
+| `X-Wa-Number` | Opsional | `6281234567890` | Nomor bot, dicek ke `LUNA_ALLOWED_WA_NUMBER` jika `phone` tidak dikirim. Bukan penyaring tiket |
 
 > \* Salah satu dari `Authorization: Bearer ...` atau `X-Luna-Api-Key` wajib dikirim.
 
@@ -72,7 +72,7 @@ Setiap request ke `/api/v1/luna/*` **wajib** menyertakan header berikut:
 | # | Method | Endpoint | Deskripsi Singkat |
 |---|---|---|---|
 | 1 | `GET` | `/api/v1/luna/catalog` | Ambil katalog kategori layanan, `service_catalogs`, & daftar aset inventaris aktif |
-| 2 | `GET` | `/api/v1/luna/tickets` | Ambil maksimal 20 tiket terbaru (bisa filter `phone`, `status`, `source`), atau 100 tiket yang berubah sejak `updated_since` |
+| 2 | `GET` | `/api/v1/luna/tickets` | Ambil maksimal 20 tiket terbaru (bisa filter `reporter_phone` & `status`), atau 100 tiket yang berubah sejak `updated_since` |
 | 3 | `POST` | `/api/v1/luna/tickets` | Buat tiket baru dari WhatsApp (mendukung kategori dinamis dari AI, validasi WA, deduplikasi, sync aset) |
 | 4 | `GET` | `/api/v1/luna/tickets/{ticket_number}` | Ambil detail status tiket, SLA, teknisi PIC, aset tertaut, & riwayat pesan |
 | 5 | `POST` | `/api/v1/luna/tickets/{ticket_number}/reply` | Kirim balasan pesan/klarifikasi dari WhatsApp (otomatis resume SLA) |
@@ -92,7 +92,7 @@ Seluruh endpoint tiket mengembalikan struktur objek `data` yang seragam:
 ```json
 {
   "id": 12,
-  "ticket_number": "TICK-202611-0012",
+  "ticket_number": "TIC-202611-0012",
   "title": "Proyektor di kelas A301 tidak menampilkan gambar HDMI sama sekali ketika dicolok...",
   "description": "Proyektor di kelas A301 tidak menampilkan gambar HDMI sama sekali ketika dicolok ke laptop.",
   "category": "Fasilitas & Lab IT",
@@ -150,13 +150,17 @@ Seluruh endpoint tiket mengembalikan struktur objek `data` yang seragam:
 | Field | Tipe | Nullable | Keterangan |
 |---|---|---|---|
 | `id` | `integer` | Tidak | ID internal tiket di database |
-| `ticket_number` | `string` | Tidak | Nomor unik tiket (contoh: `TICK-202611-0012`) |
-| `title` | `string` | Tidak | Judul singkat tiket (otomatis dipotong 80 karakter dari `description` jika tidak dikirim) |
+| `ticket_number` | `string` | Tidak | Nomor unik tiket (contoh: `TIC-202611-0012`) |
+| `title` | `string` | Tidak | Judul singkat tiket (otomatis dipotong 80 karakter dari bagian `description` sebelum baris `---` jika tidak dikirim) |
 | `description` | `string` | Tidak | Deskripsi lengkap keluhan pelapor |
 | `category` | `string` | Tidak | Kategori layanan (contoh: `Jaringan & Internet`, `Fasilitas & Lab IT`, `Lainnya`) |
 | `service_item` | `string` | Tidak | Item layanan spesifik dari katalog `Ticket::SERVICES` |
 | `authority` | `string` | Tidak | `local` (ditangani PuTI Surabaya) atau `central` (butuh koordinasi pusat) |
 | `scope` | `string` | Tidak | `internal_surabaya`, `needs_clarification`, atau `escalated_central` |
+| `reporter_phone` | `string` | Ya | Nomor WA pelapor asli (format `62…`). Dipakai Luna untuk bukti kepemilikan tiket |
+| `reporter_status` | `string` | Ya | `mahasiswa`, `dosen`, atau `staf` |
+| `unit_kerja` | `string` | Ya | Unit kerja / fakultas pelapor |
+| `request_type` | `string` | Ya | `PENGADUAN IT` atau `PERMINTAAN LAYANAN` |
 | `status.value` | `string` | Tidak | Nilai enum status (`open`, `in_progress`, `finished`, `canceled`, `failed`, `redirected`) |
 | `status.label` | `string` | Tidak | Label bahasa Indonesia untuk ditampilkan ke pengguna |
 | `status.color` | `string` | Tidak | Warna badge UI (`blue`, `purple`, `emerald`, `gray`, `rose`, `orange`) |
@@ -206,10 +210,10 @@ Seluruh endpoint tiket mengembalikan struktur objek `data` yang seragam:
 ### 6.3. Logika Otomatis & Proteksi Input WhatsApp (`POST /tickets`)
 1. **Validasi Nomor & Grup WA**: Nomor dengan sufiks grup (`@g.us`) atau di luar panjang 9–15 digit setelah normalisasi otomatis ditolak dengan `422` beserta `luna_reply`.
 2. **Privacy Guardrail**: Pesan yang memuat **nilai** kata sandi/PIN (`password: rahasia`, `password saya Abc123`) otomatis ditolak; keluhan seperti `lupa password igracias` tetap diterima. Penolakan memakai `422` agar kredensial tidak pernah tersimpan mentah di database.
-3. **Deduplikasi Webhook (60 Detik)**: Jika pesan `description` yang identik dari nomor `phone` yang sama masuk lagi dalam 60 detik terakhir (akibat *retry* gateway WA), API mengembalikan `200 OK` dengan `"duplicate": true` dan tiket yang sudah ada tanpa membuat tiket ganda.
+3. **Deduplikasi Webhook (60 Detik)**: Jika pesan `description` yang identik dari nomor pelapor (`reporter_phone`, atau `phone` jika kosong) yang sama masuk lagi dalam 60 detik terakhir (akibat *retry* gateway WA), API mengembalikan `200 OK` dengan `"duplicate": true` dan tiket yang sudah ada tanpa membuat tiket ganda.
 4. **Klasifikasi Kategori Dinamis dari AI**: Jika AI mengirimkan `category`, `service_item`, dan opsional `authority` (`local`/`central`), backend **langsung memakai klasifikasi dari payload AI** (sepenuhnya mengikuti Knowledge Base AI seperti `LUNA_03_KategoriLayanan.md`). Fallback `LunaAiService::suggestService()` hanya dipakai bila `category` atau `service_item` tidak diisi.
 5. **Resolusi SLA**: Mencari `sla_resolution_hours` pada tabel `service_catalogs` berdasarkan `service_item`; jika tidak ada, memakai target SLA berdasarkan `priority` (mendukung huruf besar/kecil & alias bahasa Indonesia: `rendah`/`sedang`/`tinggi`/`darurat`).
-6. **Evaluasi Ambiguitas**: Jika deskripsi terlalu pendek (< 20 karakter / kata generik seperti `"wifi error"`, `"rusak"`) atau layanan fisik (`authority = local`) tidak menyertakan `location`, maka `scope = needs_clarification`, SLA dijeda, dan `luna_reply` berisi pertanyaan klarifikasi.
+6. **Evaluasi Ambiguitas**: Jika deskripsi terlalu pendek (< 20 karakter / kata generik seperti `"wifi error"`, `"rusak"`) atau layanan fisik (`authority = local`) tidak menyertakan `location`, maka `scope = needs_clarification`, SLA dijeda, dan `luna_reply` berisi pertanyaan klarifikasi. Panjang dihitung dari `description` lengkap, termasuk blok sesudah `---`.
 7. **Sinkronisasi Inventaris & Warning**: `asset_code` dicocokkan secara *case-insensitive*. Jika kode aset tidak ditemukan di database, tiket **tetap dibuat** namun response menyertakan array `warnings` agar bot dapat memberi tahu user.
 
 ---
@@ -228,7 +232,7 @@ Mengambil seluruh kategori layanan (`Ticket::SERVICES`) dan daftar aset inventar
 ```bash
 curl -X GET "https://<domain>/api/v1/luna/catalog" \
   -H "Accept: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026"
+  -H "Authorization: Bearer <LUNA_API_KEY>"
 ```
 
 #### Contoh Response — `200 OK`
@@ -300,16 +304,15 @@ Mengembalikan maksimal **20 tiket terbaru** diurutkan dari yang paling baru (`la
 
 | Parameter | Tipe | Wajib | Keterangan |
 |---|---|---|---|
-| `phone` | `string` | Opsional | Filter tiket berdasarkan nomor WA pelapor (dinormalisasi otomatis). Bisa juga lewat header `X-Wa-Number`. |
+| `reporter_phone` | `string` | Opsional | Filter tiket berdasarkan nomor WA pelapor asli (dinormalisasi otomatis). Jika kosong, mengembalikan tiket dari kanal `whatsapp_luna`. |
 | `status` | `string` | Opsional | Filter berdasarkan status (`open`, `in_progress`, `finished`, `canceled`, `failed`, `redirected`). |
-| `source` | `string` | Opsional | Filter `source_channel` (`whatsapp_luna` atau `web`). |
 | `updated_since` | `string` | Opsional | ISO 8601 (di-*URL-encode*). Tanpa offset dianggap WIB. Nilai tidak valid → `422`. |
 
 #### Contoh Request (cURL)
 ```bash
-curl -X GET "https://<domain>/api/v1/luna/tickets?phone=081234567890&status=open" \
+curl -X GET "https://<domain>/api/v1/luna/tickets?reporter_phone=081299998888&status=open" \
   -H "Accept: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026"
+  -H "Authorization: Bearer <LUNA_API_KEY>"
 ```
 
 #### Contoh Response — `200 OK`
@@ -319,7 +322,7 @@ curl -X GET "https://<domain>/api/v1/luna/tickets?phone=081234567890&status=open
   "data": [
     {
       "id": 12,
-      "ticket_number": "TICK-202611-0012",
+      "ticket_number": "TIC-202611-0012",
       "title": "Proyektor di kelas A301 tidak menampilkan gambar HDMI sama sekali...",
       "description": "Proyektor di kelas A301 tidak menampilkan gambar HDMI sama sekali ketika dicolok ke laptop.",
       "category": "Fasilitas & Lab IT",
@@ -377,10 +380,15 @@ Membuat tiket baru dari percakapan WhatsApp, menjalankan inferensi layanan Luna 
 
 | Field | Tipe | Wajib | Validasi | Keterangan |
 |---|---|---|---|---|
-| `phone` | `string` | **Ya** | `max:50` | Nomor WhatsApp pelapor (mendukung `08...`, `+62...`, atau JID `@s.whatsapp.net`) |
-| `description` | `string` | **Ya** | `min:3` | Deskripsi kendala dari pelapor |
-| `reporter_name` | `string` | Opsional | `max:150` | Nama pelapor yang ditampilkan di SIMASS. Akun dicocokkan lewat `phone`; tanpa akun, tiket menumpang akun terkunci "Pelapor WhatsApp (Luna)" |
-| `title` | `string` | Opsional | `max:255` | Judul tiket (jika kosong, otomatis diambil 80 karakter pertama `description`) |
+| `phone` | `string` | **Ya** | `max:80` | Nomor WhatsApp bot (harus sama dengan `LUNA_ALLOWED_WA_NUMBER` jika diisi; mendukung `08...`, `+62...`, atau JID `@s.whatsapp.net`) |
+| `reporter_phone` | `string` | Opsional | `max:80` | Nomor WA pelapor asli. Dinormalisasi ke `62…`, **tidak** dicocokkan dengan `LUNA_ALLOWED_WA_NUMBER`. Jika kosong, memakai `phone` |
+| `reporter_status` | `string` | Opsional | `in:mahasiswa,dosen,staf` | Status pelapor |
+| `unit_kerja` | `string` | Opsional | `max:150` | Unit kerja / fakultas pelapor |
+| `request_type` | `string` | Opsional | `in:PENGADUAN IT,PERMINTAAN LAYANAN` | Jenis laporan |
+| `external_id` | `string` | Opsional | `max:100` | Kunci idempotensi (alternatif header `Idempotency-Key`) |
+| `description` | `string` | **Ya** | `min:3`, `max:4000` | Deskripsi kendala dari pelapor |
+| `reporter_name` | `string` | Opsional | `max:150` | Nama pelapor yang ditampilkan di SIMASS. Semua tiket WhatsApp menumpang satu akun terkunci "Pelapor WhatsApp (Luna)"; nomor HP dan NIM/NIP tidak dicocokkan ke akun |
+| `title` | `string` | Opsional | `max:255` | Judul tiket (jika kosong, otomatis diambil 80 karakter pertama `description` sebelum baris `---`) |
 | `category` | `string` | Opsional | `max:100` | Kategori layanan (auto-detect via Luna AI jika kosong) |
 | `service_item` | `string` | Opsional | `max:150` | Item layanan spesifik (auto-detect via Luna AI jika kosong) |
 | `location` | `string` | Opsional | `max:255` | Lokasi gedung/lantai/ruangan (otomatis memakai lokasi aset jika `asset_code` valid) |
@@ -388,14 +396,20 @@ Membuat tiket baru dari percakapan WhatsApp, menjalankan inferensi layanan Luna 
 | `asset_code` | `string` | Opsional | `max:50` | Kode aset inventaris (contoh: `INV-PUTI-2026-0099`) |
 | `inventory_item_id` | `integer` | Opsional | `exists:inventory_items,id` | ID internal aset inventaris (diprioritaskan di atas `asset_code` jika keduanya dikirim) |
 
+#### Idempotensi & Blok Metadata
+
+- Kirim header `Idempotency-Key: <id unik>` (atau field `external_id`). Jika key yang sama datang lagi dalam **24 jam**, API mengembalikan `200 OK` dengan `"duplicate": true` dan tiket yang sudah ada tanpa membuat tiket baru. Permintaan bersamaan dengan key yang sama yang masih diproses mendapat `409 Conflict`.
+- Data tambahan boleh ditempel di akhir `description` setelah baris kosong dan `---`. Bagian ini tidak dipakai untuk judul otomatis maupun deteksi layanan.
+
 #### Contoh Request (cURL)
 ```bash
 curl -X POST "https://<domain>/api/v1/luna/tickets" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026" \
+  -H "Authorization: Bearer <LUNA_API_KEY>" \
   -d '{
     "phone": "+62 812-3456-7890@s.whatsapp.net",
+    "reporter_phone": "081299998888",
     "reporter_name": "Budi Santoso",
     "description": "Proyektor di kelas A301 tidak menampilkan gambar HDMI sama sekali ketika dicolok ke laptop.",
     "location": "Gedung A Lt. 3 R.301",
@@ -408,11 +422,11 @@ curl -X POST "https://<domain>/api/v1/luna/tickets" \
 ```json
 {
   "success": true,
-  "message": "Tiket TICK-202611-0012 berhasil dibuat melalui WhatsApp Luna AI.",
-  "luna_reply": "Halo! Laporan Anda melalui WhatsApp telah diterima oleh **Luna AI PuTI Surabaya** dengan nomor tiket **TICK-202611-0012** (Status: **Diterima**).",
+  "message": "Tiket TIC-202611-0012 berhasil dibuat melalui WhatsApp Luna AI.",
+  "luna_reply": "Halo! Laporan Anda melalui WhatsApp telah diterima oleh **Luna AI PuTI Surabaya** dengan nomor tiket **TIC-202611-0012** (Status: **Diterima**).",
   "data": {
     "id": 12,
-    "ticket_number": "TICK-202611-0012",
+    "ticket_number": "TIC-202611-0012",
     "title": "Proyektor di kelas A301 tidak menampilkan gambar HDMI sama sekali ketika dicolok...",
     "description": "Proyektor di kelas A301 tidak menampilkan gambar HDMI sama sekali ketika dicolok ke laptop.",
     "category": "Fasilitas & Lab IT",
@@ -471,11 +485,11 @@ Jika user hanya mengirim `{"phone": "081234567890", "description": "wifi error"}
 ```json
 {
   "success": true,
-  "message": "Tiket TICK-202611-0013 berhasil dibuat melalui WhatsApp Luna AI.",
+  "message": "Tiket TIC-202611-0013 berhasil dibuat melalui WhatsApp Luna AI.",
   "luna_reply": "Halo! Saya **Luna AI** dari Helpdesk PuTI. Terima kasih telah melapor. 😊\n\nAgar teknisi PuTI kami dapat segera meluncur dan menangani kendala Anda, mohon bantu melengkapi:\n1. **Lokasi spesifik:** Nama Gedung, Lantai, dan Nomor Ruangan.\n2. **Detail kendala:** Gejala kerusakan atau pesan error yang muncul.\n\nAnda dapat langsung membalas pesan ini di bawah. Terima kasih!",
   "data": {
     "id": 13,
-    "ticket_number": "TICK-202611-0013",
+    "ticket_number": "TIC-202611-0013",
     "title": "wifi error",
     "description": "wifi error",
     "category": "Jaringan & Internet",
@@ -546,13 +560,13 @@ Mengambil detail lengkap satu tiket beserta seluruh riwayat percakapan publik (`
 
 | Parameter | Tipe | Wajib | Keterangan |
 |---|---|---|---|
-| `ticket_number` | `string` | **Ya** | Nomor tiket (contoh: `TICK-202611-0012`) |
+| `ticket_number` | `string` | **Ya** | Nomor tiket (contoh: `TIC-202611-0012`) |
 
 #### Contoh Request (cURL)
 ```bash
-curl -X GET "https://<domain>/api/v1/luna/tickets/TICK-202611-0012" \
+curl -X GET "https://<domain>/api/v1/luna/tickets/TIC-202611-0012" \
   -H "Accept: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026" \
+  -H "Authorization: Bearer <LUNA_API_KEY>" \
   -H "X-Wa-Number: 6281234567890"
 ```
 
@@ -562,7 +576,7 @@ curl -X GET "https://<domain>/api/v1/luna/tickets/TICK-202611-0012" \
   "success": true,
   "data": {
     "id": 12,
-    "ticket_number": "TICK-202611-0012",
+    "ticket_number": "TIC-202611-0012",
     "title": "Proyektor di kelas A301 tidak menampilkan gambar HDMI sama sekali...",
     "description": "Proyektor di kelas A301 tidak menampilkan gambar HDMI sama sekali ketika dicolok ke laptop.",
     "category": "Fasilitas & Lab IT",
@@ -620,7 +634,7 @@ curl -X GET "https://<domain>/api/v1/luna/tickets/TICK-202611-0012" \
 ```json
 {
   "success": false,
-  "message": "Tiket TICK-202611-9999 tidak ditemukan."
+  "message": "Tiket TIC-202611-9999 tidak ditemukan."
 }
 ```
 
@@ -645,10 +659,10 @@ Menambahkan pesan balasan dari pelapor WhatsApp ke thread tiket. Jika tiket sebe
 
 #### Contoh Request (cURL)
 ```bash
-curl -X POST "https://<domain>/api/v1/luna/tickets/TICK-202611-0013/reply" \
+curl -X POST "https://<domain>/api/v1/luna/tickets/TIC-202611-0013/reply" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026" \
+  -H "Authorization: Bearer <LUNA_API_KEY>" \
   -d '{
     "phone": "081234567890",
     "message": "Lokasi di Gedung A Lantai 3 R.305, tidak bisa dapat IP address."
@@ -662,7 +676,7 @@ curl -X POST "https://<domain>/api/v1/luna/tickets/TICK-202611-0013/reply" \
   "message": "Balasan WhatsApp berhasil ditambahkan ke tiket.",
   "data": {
     "id": 13,
-    "ticket_number": "TICK-202611-0013",
+    "ticket_number": "TIC-202611-0013",
     "title": "wifi error",
     "description": "wifi error",
     "category": "Jaringan & Internet",
@@ -756,10 +770,10 @@ Membatalkan tiket langsung dari WhatsApp. Hanya diizinkan selama tiket masih ber
 
 #### Contoh Request (cURL)
 ```bash
-curl -X POST "https://<domain>/api/v1/luna/tickets/TICK-202611-0013/cancel" \
+curl -X POST "https://<domain>/api/v1/luna/tickets/TIC-202611-0013/cancel" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026" \
+  -H "Authorization: Bearer <LUNA_API_KEY>" \
   -d '{
     "phone": "081234567890",
     "status_note": "Wi-Fi sudah kembali normal setelah reconnect."
@@ -770,10 +784,10 @@ curl -X POST "https://<domain>/api/v1/luna/tickets/TICK-202611-0013/cancel" \
 ```json
 {
   "success": true,
-  "message": "Tiket TICK-202611-0013 berhasil dibatalkan.",
+  "message": "Tiket TIC-202611-0013 berhasil dibatalkan.",
   "data": {
     "id": 13,
-    "ticket_number": "TICK-202611-0013",
+    "ticket_number": "TIC-202611-0013",
     "title": "wifi error",
     "description": "wifi error",
     "category": "Jaringan & Internet",
@@ -826,7 +840,7 @@ curl -X POST "https://<domain>/api/v1/luna/tickets/TICK-202611-0013/cancel" \
 {
   "success": false,
   "message": "Tiket hanya dapat dibatalkan selama berstatus Diterima (Open).",
-  "luna_reply": "Tiket **TICK-202611-0013** tidak dapat dibatalkan karena sudah berstatus **Sedang Dikerjakan**."
+  "luna_reply": "Tiket **TIC-202611-0013** tidak dapat dibatalkan karena sudah berstatus **Sedang Dikerjakan**."
 }
 ```
 
@@ -858,7 +872,7 @@ Endpoint ini dirancang untuk menghubungkan **SIMASS-PuTI** dengan **repositori A
 ```bash
 curl -X GET "https://<domain>/api/v1/luna/knowledge-base?include_content=1&include_sync_data=1" \
   -H "Accept: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026"
+  -H "Authorization: Bearer <LUNA_API_KEY>"
 ```
 
 #### Contoh Response — `200 OK`
@@ -908,7 +922,7 @@ Parameter `{document}` dapat dikirim dengan atau tanpa `.md` (contoh: `LUNA_03_K
 ```bash
 curl -X GET "https://<domain>/api/v1/luna/knowledge-base/LUNA_03_KategoriLayanan" \
   -H "Accept: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026"
+  -H "Authorization: Bearer <LUNA_API_KEY>"
 ```
 
 ---
@@ -933,7 +947,7 @@ Menambahkan bagian baru (`mode: "append"`, default) atau menimpa isi dokumen (`m
 curl -X POST "https://<domain>/api/v1/luna/knowledge-base" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026" \
+  -H "Authorization: Bearer <LUNA_API_KEY>" \
   -d '{
     "document": "LUNA_03_KategoriLayanan.md",
     "section_title": "Keamanan & Firewall",
@@ -971,7 +985,7 @@ Cocok untuk push/sync otomatis dari repo AI eksternal (misal lewat GitHub Action
 curl -X PUT "https://<domain>/api/v1/luna/knowledge-base/LUNA_01_Identitas.md" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026" \
+  -H "Authorization: Bearer <LUNA_API_KEY>" \
   -d '{
     "content": "# LUNA 01 — Identitas\nSaya adalah Luna AI, asisten layanan Helpdesk PuTI Telkom University Surabaya."
   }'
@@ -986,7 +1000,7 @@ curl -X PUT "https://<domain>/api/v1/luna/knowledge-base/LUNA_01_Identitas.md" \
 ```bash
 curl -X DELETE "https://<domain>/api/v1/luna/knowledge-base/LUNA_01_Identitas.md" \
   -H "Accept: application/json" \
-  -H "Authorization: Bearer puti-luna-secret-key-2026"
+  -H "Authorization: Bearer <LUNA_API_KEY>"
 ```
 
 ---
@@ -999,8 +1013,10 @@ curl -X DELETE "https://<domain>/api/v1/luna/knowledge-base/LUNA_01_Identitas.md
 | `201 Created` | Tiket baru atau dokumen KB baru berhasil dibuat | `{"success": true, "message": "...", "luna_reply": "...", "data": ...}` |
 | `401 Unauthorized` | API Key tidak dikirim, salah, atau belum dikonfigurasi di server | `{"success": false, "message": "Unauthorized: Invalid or missing Luna AI API key."}` |
 | `403 Forbidden` | Nomor WhatsApp tidak cocok dengan `LUNA_ALLOWED_WA_NUMBER` | `{"success": false, "message": "Forbidden: Nomor WhatsApp ini tidak diizinkan untuk mengakses layanan tiket Luna AI."}` |
-| `404 Not Found` | Nomor tiket atau dokumen KB tidak ditemukan | `{"success": false, "message": "Tiket TICK-202611-9999 tidak ditemukan.", "luna_reply": "..."}` |
+| `404 Not Found` | Nomor tiket atau dokumen KB tidak ditemukan | `{"success": false, "message": "Tiket TIC-202611-9999 tidak ditemukan.", "luna_reply": "..."}` |
+| `409 Conflict` | Permintaan dengan `Idempotency-Key` yang sama masih diproses | `{"success": false, "message": "..."}` |
 | `422 Unprocessable Entity` | Error validasi input WA (grup `@g.us`, password terdeteksi, field kosong, nama file tidak valid, atau status tiket tidak memenuhi syarat) | Lihat contoh di bawah |
+| `500 Internal Server Error` | Kesalahan tak terduga di server (detail tidak ditampilkan). Semua error di `/api/v1/luna/*` selalu JSON, tidak pernah HTML | `{"success": false, "message": "Terjadi kesalahan pada server SIMASS."}` |
 
 #### Contoh Format Error Validasi Konsisten (`422 Unprocessable Entity`)
 ```json
@@ -1039,6 +1055,6 @@ curl -X DELETE "https://<domain>/api/v1/luna/knowledge-base/LUNA_01_Identitas.md
    └─ SLA otomatis dilanjutkan dan teknisi langsung ditugaskan.
 
 4. [User Bertanya Status / Membatalkan Tiket]
-   GET  /api/v1/luna/tickets/{ticket_number}  (case-insensitive, mendukung #TICK-...)
+   GET  /api/v1/luna/tickets/{ticket_number}  (case-insensitive, mendukung #TIC-...)
    POST /api/v1/luna/tickets/{ticket_number}/cancel (dengan `status_note`)
 ```

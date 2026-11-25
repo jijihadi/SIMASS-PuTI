@@ -65,10 +65,6 @@ class VerifyLunaApiKey
             ], 403);
         }
 
-        if ($requestPhone !== '') {
-            $request->merge(['normalized_phone' => $requestPhone]);
-        }
-
         return $next($request);
     }
 }
