@@ -224,7 +224,7 @@
                                         class="bg-telkom-600 text-white p-4 rounded-3xl rounded-tr-sm text-sm leading-relaxed shadow-md">
                                         <div
                                             class="flex items-center justify-between gap-4 mb-1 text-telkom-100 text-[10px]">
-                                            <span class="font-bold">{{ $msg->user?->name ?? 'Pelapor' }}</span>
+                                            <span class="font-bold">{{ $ticket->reporter_display_name }}</span>
                                             <span>{{ $msg->created_at->format('H:i') }}</span>
                                         </div>
                                         <p class="text-xs text-white leading-relaxed">{!! nl2br(e($msg->message)) !!}</p>
@@ -403,7 +403,7 @@
                         <!-- Pelapor -->
                         <div class="pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
                             <span class="text-gray-500">Pelapor:</span>
-                            <span class="font-semibold text-gray-900 dark:text-white">{{ $ticket->user->name }}</span>
+                            <span class="font-semibold text-gray-900 dark:text-white">{{ $ticket->reporter_display_name }}</span>
                         </div>
 
                         <!-- Teknisi -->

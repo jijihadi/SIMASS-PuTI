@@ -4,6 +4,7 @@ use App\Enums\TicketStatus;
 use App\Models\InventoryItem;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\LunaAiService;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
@@ -202,6 +203,117 @@ test('luna api handles whatsapp input errors, privacy guardrail, unknown asset w
         ->getJson('/api/v1/luna/tickets/'.strtolower($ticketNumber))
         ->assertStatus(200)
         ->assertJsonPath('data.ticket_number', $ticketNumber);
+});
+
+test('luna classifies complaints by word, not by fragments of the payload tail', function (string $complaint, ?string $expected) {
+    $tail = "\n\n---\nJenis laporan: INCIDENT\nStatus pelapor: Mahasiswa\nNo. WA pelapor: 6281234567890";
+
+    expect(app(LunaAiService::class)->suggestService($complaint.$tail)['service_item'] ?? null)->toBe($expected);
+})->with([
+    ['proyektor kelas A301 mati total', 'Proyektor / Perangkat Ruang Kelas'],
+    ['akun SSO terkunci', 'Akun iGracias & Single Sign-On (SSO)'],
+    ['tolong mereset password saya', 'Akun iGracias & Single Sign-On (SSO)'],
+    ['emailku tidak bisa menerima pesan', 'Email Kampus & Lisensi Microsoft 365'],
+    ['LMS CeLOE tidak bisa dibuka', 'LMS CeLOE & Perkuliahan Daring'],
+    ['access point lantai 2 mati', 'Wi-Fi Kampus (Eduroam / TelU-Guest)'],
+    ['processor laptop panas', null],
+]);
+
+test('reporters without an account share one locked luna account and keep their own name', function () {
+    config(['services.luna.allowed_wa_number' => '']);
+    $staff = User::factory()->create(['type' => 'Staf', 'nim' => '1234567890']);
+
+    $create = fn (string $phone, string $name): Ticket => Ticket::where(
+        'ticket_number',
+        $this->withToken('test-secret-luna-key')
+            ->postJson('/api/v1/luna/tickets', [
+                'phone' => $phone,
+                'reporter_name' => $name,
+                'nim' => '1234567890',
+                'description' => 'Proyektor di kelas A301 tidak menyala sejak pagi.',
+                'location' => 'Gedung A R.301',
+            ])
+            ->assertStatus(201)
+            ->json('data.ticket_number')
+    )->firstOrFail();
+
+    $first = $create('081111111111', 'Pelapor Satu');
+    $second = $create('082222222222', 'Pelapor Dua');
+    $account = $first->user;
+
+    expect($account->id)->not->toBe($staff->id);
+    expect($second->user_id)->toBe($account->id);
+    expect($account->is_active)->toBeFalse();
+    expect($account->isTicketingStaff())->toBeFalse();
+
+    foreach ([route('ticket.show', $first), route('ticket.tasks'), route('ticket.history')] as $url) {
+        $this->actingAs($staff)->get($url)
+            ->assertOk()
+            ->assertSee('Pelapor Satu')
+            ->assertDontSee($account->name);
+    }
+
+    // Akun yang dihapus admin tidak boleh membuat halaman tiketnya error.
+    $account->delete();
+    $this->get(route('ticket.show', $first))->assertOk()->assertSee('Pelapor Satu');
+});
+
+test('privacy guardrail blocks secret values but accepts complaints about passwords', function (string $description, int $status) {
+    config(['services.luna.allowed_wa_number' => '']);
+
+    $this->withToken('test-secret-luna-key')
+        ->postJson('/api/v1/luna/tickets', [
+            'phone' => '081234567890',
+            'description' => $description,
+            'location' => 'Gedung A R.301',
+        ])
+        ->assertStatus($status);
+})->with([
+    ['lupa password igracias', 201],
+    ['password email tidak bisa dipakai', 201],
+    ['tidak bisa login, password ditolak terus', 201],
+    ['password saya salah! tolong dibantu', 201],
+    ['lupa password office365', 201],
+    ['Kendala password: lupa sejak kemarin', 201],
+    ['kata sandi akun microsoft kadaluarsa', 201],
+    ['password saya: Rahasia123', 422],
+    ['password: rahasia', 422],
+    ['passwordnya adalah kucingku', 422],
+    ['kata sandi saya Rahasia2026!', 422],
+    ['pin saya 123456', 422],
+]);
+
+test('luna ticket list supports incremental sync across timezones', function () {
+    $user = User::factory()->create();
+    $make = fn (array $attributes) => Ticket::factory()->create($attributes + [
+        'user_id' => $user->id,
+        'source_channel' => 'whatsapp_luna',
+    ]);
+
+    $stale = $make(['updated_at' => now()->subHours(3)]);
+    $web = $make(['source_channel' => 'web']);
+    $newest = $make(['updated_at' => now()->subMinute()]);
+    $oldest = $make(['updated_at' => now()->subMinutes(30)]);
+    foreach (range(1, 22) as $i) {
+        $make(['updated_at' => now()->subMinutes(10)]);
+    }
+
+    $response = $this->withToken('test-secret-luna-key')
+        ->getJson('/api/v1/luna/tickets?'.http_build_query([
+            'updated_since' => now()->subHour()->utc()->toIso8601String(),
+            'source' => 'whatsapp_luna',
+        ]))
+        ->assertOk()
+        ->assertJsonStructure(['data' => [['ticket_number', 'updated_at']]]);
+
+    $numbers = collect($response->json('data'))->pluck('ticket_number');
+    expect($numbers)->toHaveCount(24);
+    expect($numbers->first())->toBe($oldest->ticket_number);
+    expect($numbers->last())->toBe($newest->ticket_number);
+    expect($numbers->all())->not->toContain($stale->ticket_number);
+    expect($numbers->all())->not->toContain($web->ticket_number);
+
+    $this->getJson('/api/v1/luna/tickets?updated_since=bukan-tanggal')->assertStatus(422);
 });
 
 test('luna knowledge base api supports listing, creating, appending, syncing, deleting, and blocks invalid filenames', function () {

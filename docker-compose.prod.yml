@@ -16,6 +16,7 @@ services:
       DB_DATABASE: db_simass
       DB_USERNAME: simass
       DB_PASSWORD: ${DB_PASSWORD}
+      LUNA_API_KEY: ${LUNA_API_KEY:-}
       SESSION_DRIVER: database
       SESSION_SECURE_COOKIE: "true"
       CACHE_STORE: database

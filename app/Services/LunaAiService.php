@@ -14,7 +14,7 @@ class LunaAiService
         $textLower = strtolower($text);
 
         $rules = [
-            'Wi-Fi Kampus (Eduroam / TelU-Guest)' => ['wifi', 'wi-fi', 'eduroam', 'telu-guest', 'sinyal', 'hotspot', 'ap', 'access point'],
+            'Wi-Fi Kampus (Eduroam / TelU-Guest)' => ['wifi', 'wi-fi', 'eduroam', 'telu-guest', 'sinyal', 'hotspot', 'access point'],
             'Jaringan Kabel LAN Gedung / Ruangan' => ['kabel lan', 'kabel jaringan', 'rj45', 'port lan', 'switch', 'koneksi kabel'],
             'Akun iGracias & Single Sign-On (SSO)' => ['igracias', 'sso', 'login igracias', 'akun kampus', 'reset password', 'lupa password', 'akun terblokir'],
             'Email Kampus & Lisensi Microsoft 365' => ['email', 'm365', 'microsoft 365', 'outlook', 'office 365', 'teams', 'lisensi word'],
@@ -25,7 +25,8 @@ class LunaAiService
 
         foreach ($rules as $serviceItem => $keywords) {
             foreach ($keywords as $kw) {
-                if (str_contains($textLower, $kw)) {
+                // Singkatan pendek harus di awal kata: "sso" juga ada di dalam "processor".
+                if (strlen($kw) <= 3 ? preg_match("/\b{$kw}/", $textLower) : str_contains($textLower, $kw)) {
                     // Find category and metadata from Ticket::SERVICES
                     foreach (Ticket::SERVICES as $category => $items) {
                         if (isset($items[$serviceItem])) {

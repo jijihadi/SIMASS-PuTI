@@ -53,11 +53,22 @@ class LunaTicketApiController extends Controller
     }
 
     /**
-     * List Recent Tickets for the Whitelisted WhatsApp Number
+     * List Recent Tickets, or tickets changed since `updated_since` for incremental sync
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Ticket::with(['user', 'assignee', 'inventoryItem', 'inventoryItems'])->latest();
+        $validator = Validator::make($request->all(), [
+            'updated_since' => ['nullable', 'date'],
+            'source' => ['nullable', 'string', 'max:30'],
+        ], [
+            'updated_since.date' => 'updated_since harus berupa tanggal/waktu yang valid (ISO 8601).',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator->errors()->first(), $validator->errors()->toArray());
+        }
+
+        $query = Ticket::with(['user', 'assignee', 'inventoryItem', 'inventoryItems']);
 
         $normalizedPhone = $request->input('normalized_phone')
             ?: VerifyLunaApiKey::normalizeWaPhone($request->query('phone'));
@@ -71,7 +82,21 @@ class LunaTicketApiController extends Controller
             $query->where('status', $status);
         }
 
-        $tickets = $query->take(20)->get();
+        if ($request->filled('source')) {
+            $query->where('source_channel', $request->input('source'));
+        }
+
+        if ($request->filled('updated_since')) {
+            // Urut dari perubahan terlama supaya pemanggil bisa lanjut dari updated_at terakhir.
+            $query->where('updated_at', '>=', $request->date('updated_since')->setTimezone(config('app.timezone')))
+                ->orderBy('updated_at')
+                ->orderBy('id')
+                ->take(100);
+        } else {
+            $query->latest()->take(20);
+        }
+
+        $tickets = $query->get();
 
         return response()->json([
             'success' => true,
@@ -105,7 +130,6 @@ class LunaTicketApiController extends Controller
         $validator = Validator::make($input, [
             'phone' => ['required', 'string', 'max:80'],
             'reporter_name' => ['nullable', 'string', 'max:150'],
-            'nim' => ['nullable', 'string', 'max:50'],
             'title' => ['nullable', 'string', 'max:255'],
             'description' => ['required', 'string', 'min:3', 'max:4000'],
             'category' => ['nullable', 'string', 'max:100'],
@@ -194,7 +218,7 @@ class LunaTicketApiController extends Controller
             ], 200);
         }
 
-        $reporter = $this->resolveReporter($normalizedPhone, $validated['nim'] ?? null, $validated['reporter_name'] ?? null);
+        $reporter = $this->resolveReporter($normalizedPhone);
 
         // Resolve linked inventory items by IDs or case-insensitive asset codes
         $warnings = [];
@@ -636,7 +660,14 @@ class LunaTicketApiController extends Controller
      */
     private function containsSensitiveCredentials(string $text): bool
     {
-        return (bool) preg_match('/\b(password|pass|kata\s*sandi|pin\s*saya|kredensial)\s*(saya|nya|adalah|:|=)?\s*[a-zA-Z0-9!@#$%^&*._-]{5,}/i', $text);
+        $key = '\b(?:password|pass|kata\s*sandi|pin\s*saya|kredensial)(?:\s*(?:saya|nya))?\b';
+        // Kata sesudahnya yang berarti keluhan, bukan nilai sandi.
+        $complaint = '(?!(?:lupa|salah|tidak|nggak|belum|sudah|gagal|error|expired|ditolak|terkunci|hilang|reset|ganti|minta|mohon|akun|email|igracias|office365)\b)';
+        // Sesudah ":" "=" "adalah" apa pun dianggap nilai. Tanpa itu, hanya kata yang memuat angka/simbol.
+        $explicit = '\s*(?:[:=]|adalah\b)\s*'.$complaint.'\S{4,}';
+        $bare = '\s+'.$complaint.'(?=\S*[\d@#$%^&])\S{5,}';
+
+        return (bool) preg_match('/'.$key.'(?:'.$explicit.'|'.$bare.')/i', $text);
     }
 
     /**
@@ -655,35 +686,21 @@ class LunaTicketApiController extends Controller
     }
 
     /**
-     * Resolve or create a staff/reporter User record for the whitelisted WhatsApp number.
+     * Akun dengan nomor WhatsApp yang sama, atau satu akun Luna yang terkunci.
+     * NIM/NIP tidak dicocokkan: pelapor bisa mengetik milik orang lain.
      */
-    private function resolveReporter(string $normalizedPhone, ?string $nim, ?string $reporterName): User
+    private function resolveReporter(string $normalizedPhone): User
     {
         $localZeroPhone = str_starts_with($normalizedPhone, '62')
             ? '0'.substr($normalizedPhone, 2)
             : $normalizedPhone;
 
-        $user = User::whereIn('phone', [$normalizedPhone, $localZeroPhone, '+'.$normalizedPhone])
-            ->when($nim, fn ($q) => $q->orWhere('nim', $nim))
-            ->first();
-
-        if ($user) {
-            return $user;
-        }
-
-        $fallbackUser = User::orderBy('id')->first();
-        if ($fallbackUser) {
-            return $fallbackUser;
-        }
-
-        return User::create([
-            'name' => $reporterName ?: 'Pelapor WhatsApp Luna',
-            'username' => 'wa_'.$normalizedPhone,
-            'phone' => $normalizedPhone,
-            'email' => "wa.{$normalizedPhone}@puti.telkomuniversity.ac.id",
-            'password' => bcrypt(Str::random(24)),
-            'type' => 'Staf',
-            'is_active' => true,
-        ]);
+        // Dicari lewat email, bukan username: username bisa diambil siapa pun dari halaman profil.
+        return User::whereIn('phone', [$normalizedPhone, $localZeroPhone, '+'.$normalizedPhone])->first()
+            ?? User::firstOrCreate(['email' => 'luna-whatsapp@simass.invalid'], [
+                'name' => 'Pelapor WhatsApp (Luna)',
+                'password' => Str::random(40),
+                'is_active' => false,
+            ]);
     }
 }

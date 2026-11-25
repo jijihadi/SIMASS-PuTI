@@ -39,7 +39,7 @@ class TicketResource extends JsonResource
             'source_channel' => $this->source_channel,
             'reporter' => [
                 'id' => $this->user_id,
-                'name' => $this->reporter_name ?: $this->user?->name,
+                'name' => $this->reporter_display_name,
                 'phone' => $this->reporter_phone ?: $this->user?->phone,
             ],
             'assignee' => $this->assignee ? [
@@ -68,6 +68,7 @@ class TicketResource extends JsonResource
             'sla_paused_at' => $this->sla_paused_at?->toIso8601String(),
             'resolved_at' => $this->resolved_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String(),
             'messages' => $this->whenLoaded('messages', fn () => $this->messages
                 ->where('is_internal', false)
                 ->values()

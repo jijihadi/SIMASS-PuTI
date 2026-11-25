@@ -117,7 +117,7 @@
                   </span>
                 </td>
                 <td class="px-6 py-4 text-xs">
-                  {{ $ticket->user->name }}
+                  {{ $ticket->reporter_display_name }}
                 </td>
                 <td class="px-6 py-4 text-xs text-gray-500">
                   {{ $ticket->resolved_at ? $ticket->resolved_at->format('d M Y') : $ticket->updated_at->diffForHumans() }}

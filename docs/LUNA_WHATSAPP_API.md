@@ -22,11 +22,12 @@ Dokumen ini merupakan referensi teknis lengkap untuk mengintegrasikan **Luna AI 
 Backend membaca konfigurasi keamanan dari `.env` terlebih dahulu; jika kosong, otomatis mengambil fallback dari tabel `settings` di database.
 
 ```dotenv
-# Secret Token untuk autentikasi sistem Luna AI (wajib diisi)
-LUNA_API_KEY=puti-luna-secret-key-2026
+# Secret Token untuk autentikasi sistem Luna AI (wajib diisi; buat acak, mis. `openssl rand -hex 32`)
+LUNA_API_KEY=
 
-# Nomor WhatsApp yang diizinkan mengakses API (opsional; jika diisi, nomor lain ditolak 403)
-LUNA_ALLOWED_WA_NUMBER=6281234567890
+# Nomor WhatsApp yang diizinkan mengakses API (opsional; jika diisi, nomor lain ditolak 403).
+# Kosongkan supaya `phone` berisi nomor pelapor asli.
+LUNA_ALLOWED_WA_NUMBER=
 
 # Path direktori Knowledge Base Markdown (opsional; default: storage/app/luna-knowledge-base)
 # Dapat diarahkan ke volume/folder bersama jika terpasang di server yang sama dengan repo AI
@@ -71,7 +72,7 @@ Setiap request ke `/api/v1/luna/*` **wajib** menyertakan header berikut:
 | # | Method | Endpoint | Deskripsi Singkat |
 |---|---|---|---|
 | 1 | `GET` | `/api/v1/luna/catalog` | Ambil katalog kategori layanan, `service_catalogs`, & daftar aset inventaris aktif |
-| 2 | `GET` | `/api/v1/luna/tickets` | Ambil maksimal 20 tiket terbaru (bisa filter `phone` & `status`) |
+| 2 | `GET` | `/api/v1/luna/tickets` | Ambil maksimal 20 tiket terbaru (bisa filter `phone`, `status`, `source`), atau 100 tiket yang berubah sejak `updated_since` |
 | 3 | `POST` | `/api/v1/luna/tickets` | Buat tiket baru dari WhatsApp (mendukung kategori dinamis dari AI, validasi WA, deduplikasi, sync aset) |
 | 4 | `GET` | `/api/v1/luna/tickets/{ticket_number}` | Ambil detail status tiket, SLA, teknisi PIC, aset tertaut, & riwayat pesan |
 | 5 | `POST` | `/api/v1/luna/tickets/{ticket_number}/reply` | Kirim balasan pesan/klarifikasi dari WhatsApp (otomatis resume SLA) |
@@ -175,6 +176,7 @@ Seluruh endpoint tiket mengembalikan struktur objek `data` yang seragam:
 | `sla_paused_at` | `string` | Ya | Waktu mulai SLA dijeda (ISO 8601), `null` jika SLA sedang berjalan |
 | `resolved_at` | `string` | Ya | Waktu tiket diselesaikan atau dibatalkan (ISO 8601) |
 | `created_at` | `string` | Tidak | Waktu pembuatan tiket (ISO 8601) |
+| `updated_at` | `string` | Tidak | Waktu perubahan terakhir (ISO 8601); pakai sebagai `updated_since` berikutnya |
 | `messages` | `array` | Kondisional | Hanya muncul pada endpoint `POST /tickets`, `GET /tickets/{ticket_number}`, `POST /reply`, dan `POST /cancel` (tidak termasuk catatan internal staf). `sender_type`: `user`, `staff`, `ai_luna`, atau `system`. |
 
 ---
@@ -203,7 +205,7 @@ Seluruh endpoint tiket mengembalikan struktur objek `data` yang seragam:
 
 ### 6.3. Logika Otomatis & Proteksi Input WhatsApp (`POST /tickets`)
 1. **Validasi Nomor & Grup WA**: Nomor dengan sufiks grup (`@g.us`) atau di luar panjang 9–15 digit setelah normalisasi otomatis ditolak dengan `422` beserta `luna_reply`.
-2. **Privacy Guardrail**: Pesan yang terdeteksi mengandung kata sandi/PIN (`password`, `kata sandi`, `pin saya`, dll.) otomatis ditolak (`422`) agar kredensial tidak pernah tersimpan mentah di database.
+2. **Privacy Guardrail**: Pesan yang memuat **nilai** kata sandi/PIN (`password: rahasia`, `password saya Abc123`) otomatis ditolak; keluhan seperti `lupa password igracias` tetap diterima. Penolakan memakai `422` agar kredensial tidak pernah tersimpan mentah di database.
 3. **Deduplikasi Webhook (60 Detik)**: Jika pesan `description` yang identik dari nomor `phone` yang sama masuk lagi dalam 60 detik terakhir (akibat *retry* gateway WA), API mengembalikan `200 OK` dengan `"duplicate": true` dan tiket yang sudah ada tanpa membuat tiket ganda.
 4. **Klasifikasi Kategori Dinamis dari AI**: Jika AI mengirimkan `category`, `service_item`, dan opsional `authority` (`local`/`central`), backend **langsung memakai klasifikasi dari payload AI** (sepenuhnya mengikuti Knowledge Base AI seperti `LUNA_03_KategoriLayanan.md`). Fallback `LunaAiService::suggestService()` hanya dipakai bila `category` atau `service_item` tidak diisi.
 5. **Resolusi SLA**: Mencari `sla_resolution_hours` pada tabel `service_catalogs` berdasarkan `service_item`; jika tidak ada, memakai target SLA berdasarkan `priority` (mendukung huruf besar/kecil & alias bahasa Indonesia: `rendah`/`sedang`/`tinggi`/`darurat`).
@@ -292,7 +294,7 @@ curl -X GET "https://<domain>/api/v1/luna/catalog" \
 
 `GET /api/v1/luna/tickets`
 
-Mengembalikan maksimal **20 tiket terbaru** diurutkan dari yang paling baru (`latest()`).
+Mengembalikan maksimal **20 tiket terbaru** diurutkan dari yang paling baru (`latest()`). Dengan `updated_since`: maksimal **100 tiket** yang berubah sejak waktu itu, diurutkan dari perubahan terlama; lanjutkan dengan `updated_at` tiket terakhir.
 
 #### Query Parameters
 
@@ -300,6 +302,8 @@ Mengembalikan maksimal **20 tiket terbaru** diurutkan dari yang paling baru (`la
 |---|---|---|---|
 | `phone` | `string` | Opsional | Filter tiket berdasarkan nomor WA pelapor (dinormalisasi otomatis). Bisa juga lewat header `X-Wa-Number`. |
 | `status` | `string` | Opsional | Filter berdasarkan status (`open`, `in_progress`, `finished`, `canceled`, `failed`, `redirected`). |
+| `source` | `string` | Opsional | Filter `source_channel` (`whatsapp_luna` atau `web`). |
+| `updated_since` | `string` | Opsional | ISO 8601 (di-*URL-encode*). Tanpa offset dianggap WIB. Nilai tidak valid → `422`. |
 
 #### Contoh Request (cURL)
 ```bash
@@ -375,8 +379,7 @@ Membuat tiket baru dari percakapan WhatsApp, menjalankan inferensi layanan Luna 
 |---|---|---|---|---|
 | `phone` | `string` | **Ya** | `max:50` | Nomor WhatsApp pelapor (mendukung `08...`, `+62...`, atau JID `@s.whatsapp.net`) |
 | `description` | `string` | **Ya** | `min:3` | Deskripsi kendala dari pelapor |
-| `reporter_name` | `string` | Opsional | `max:150` | Nama pelapor (jika kosong, menggunakan nama user di database) |
-| `nim` | `string` | Opsional | `max:50` | NIM/NIP pelapor untuk pencocokan akun user |
+| `reporter_name` | `string` | Opsional | `max:150` | Nama pelapor yang ditampilkan di SIMASS. Akun dicocokkan lewat `phone`; tanpa akun, tiket menumpang akun terkunci "Pelapor WhatsApp (Luna)" |
 | `title` | `string` | Opsional | `max:255` | Judul tiket (jika kosong, otomatis diambil 80 karakter pertama `description`) |
 | `category` | `string` | Opsional | `max:100` | Kategori layanan (auto-detect via Luna AI jika kosong) |
 | `service_item` | `string` | Opsional | `max:150` | Item layanan spesifik (auto-detect via Luna AI jika kosong) |

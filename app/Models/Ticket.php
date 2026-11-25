@@ -199,6 +199,15 @@ class Ticket extends Model
     }
 
     /**
+     * Nama pelapor untuk ditampilkan. Tiket WhatsApp bisa menumpang akun Luna,
+     * jadi nama yang dikirim Luna didahulukan.
+     */
+    public function getReporterDisplayNameAttribute(): string
+    {
+        return $this->reporter_name ?: ($this->user?->name ?? 'Pelapor');
+    }
+
+    /**
      * User-Friendly Status Label (Empathetic & Transparent)
      */
     public function getUserStatusLabelAttribute(): string

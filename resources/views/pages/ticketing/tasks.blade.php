@@ -173,7 +173,7 @@
                         <!-- Footer Card Details -->
                         <div class="pt-4 border-t border-gray-100 dark:border-gray-800 text-xs space-y-2.5">
                             <div class="flex items-center justify-between text-gray-500">
-                                <span>Pelapor: <strong>{{ $ticket->user->name }}</strong></span>
+                                <span>Pelapor: <strong>{{ $ticket->reporter_display_name }}</strong></span>
                                 <span class="text-[10px]">{{ $ticket->created_at->diffForHumans() }}</span>
                             </div>
 
