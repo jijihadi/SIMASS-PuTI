@@ -251,7 +251,12 @@ test('whatsapp reporters share one locked luna account and keep their own name',
     // Akun yang dihapus admin tidak boleh membuat halaman tiketnya error atau menolak laporan baru.
     $account->delete();
     $this->get(route('ticket.show', $first))->assertOk()->assertSee('Pelapor Satu');
-    expect($create('083333333333', 'Pelapor Tiga')->user_id)->toBe($account->id);
+
+    // Email akun terhapus dilepas, jadi laporan berikutnya memakai akun terkunci yang baru.
+    $replacement = $create('083333333333', 'Pelapor Tiga')->user;
+    expect($replacement->id)->not->toBe($account->id);
+    expect($replacement->email)->toBe('luna-whatsapp@simass.invalid');
+    expect($replacement->is_active)->toBeFalse();
 });
 
 test('privacy guardrail blocks secret values but accepts complaints about passwords', function (string $description, int $status) {

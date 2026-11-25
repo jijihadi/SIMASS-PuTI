@@ -764,8 +764,8 @@ class LunaTicketApiController extends Controller
     private function lunaReporter(): User
     {
         // Dicari lewat email, bukan username: username bisa diambil siapa pun dari halaman profil.
-        // withTrashed: akun yang terhapus admin tidak boleh menghentikan semua laporan WhatsApp.
-        return User::withTrashed()->firstOrCreate(['email' => 'luna-whatsapp@simass.invalid'], [
+        // Akun yang dihapus admin melepas email-nya (User::booted), jadi laporan berikutnya membuat akun baru.
+        return User::firstOrCreate(['email' => 'luna-whatsapp@simass.invalid'], [
             'name' => 'Pelapor WhatsApp (Luna)',
             'password' => Str::random(40),
             'is_active' => false,
