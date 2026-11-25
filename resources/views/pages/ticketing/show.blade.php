@@ -378,8 +378,7 @@
                         @if ($linkedAssets->isNotEmpty())
                             <div class="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-gray-500">Aset Inventaris Tertaut
-                                        ({{ $linkedAssets->count() }}):</span>
+                                    <span class="text-gray-500">Aset Inventaris Tertaut ({{ $linkedAssets->count() }}):</span>
                                 </div>
                                 <div class="space-y-2">
                                     @foreach ($linkedAssets as $linkedAsset)
